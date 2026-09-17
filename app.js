@@ -24,6 +24,7 @@ const REDIRECT_URL = 'https://kwonsehan.github.io/eisenhower/';
 ============================================================ */
 
 let tasks           = [];         // 현재 로드된 할 일 목록
+let rewards         = [];         // 나에게 주는 선물 & 놀기 계획 목록
 let currentUser     = null;       // 로그인 사용자
 let currentMainTab  = 'matrix';   // 'matrix' | 'calendar'
 let dashboardTab    = 'daily';    // 'daily' | 'weekly'
@@ -272,7 +273,12 @@ function showLoadingScreen() {
 async function loadAndRender() {
   showLoadingScreen();
   try {
-    tasks = await fetchTasksFromDB();
+    const [fetchedTasks, fetchedRewards] = await Promise.all([
+      fetchTasksFromDB(),
+      fetchRewardsFromDB(),
+    ]);
+    tasks   = fetchedTasks;
+    rewards = fetchedRewards;
     showApp();
     renderAll();
   } catch (e) {
@@ -403,6 +409,9 @@ function renderAll() {
 
   // 3) 캘린더 플래너 렌더링 (캘린더 탭일 때 또는 백그라운드 동기화)
   renderCalendarPlanner();
+
+  // 4) 나에게 주는 선물 & 노는 계획 렌더링
+  renderRewards();
 }
 
 
@@ -1413,6 +1422,260 @@ function initDetailPanel() {
   }
 }
 
+/* ============================================================
+   14. 🎁 나에게 주는 선물 & 노는 계획 (Play & Reward Lounge)
+============================================================ */
+
+function dbToReward(row) {
+  return {
+    id:          row.id,
+    title:       row.title,
+    condition:   row.condition || '',
+    targetDate:  row.target_date || null,
+    completed:   row.completed || false,
+    completedAt: row.completed_at || null,
+    createdAt:   row.created_at || new Date().toISOString(),
+  };
+}
+
+function rewardToDb(reward) {
+  return {
+    id:           reward.id,
+    user_id:      currentUser ? currentUser.id : null,
+    title:        reward.title,
+    condition:    reward.condition || '',
+    target_date:  reward.targetDate || null,
+    completed:    reward.completed,
+    completed_at: reward.completedAt || null,
+    created_at:   reward.createdAt,
+  };
+}
+
+// ── 로컬 스토리지 Fallback ──
+function loadLocalRewards() {
+  try {
+    const raw = localStorage.getItem('eisenhower_rewards');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+function saveLocalRewards(list) {
+  try {
+    localStorage.setItem('eisenhower_rewards', JSON.stringify(list));
+  } catch (e) {}
+}
+
+async function fetchRewardsFromDB() {
+  if (!currentUser) return loadLocalRewards();
+  try {
+    const { data, error } = await supabaseClient
+      .from('rewards')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn('rewards 테이블 조회 실패(로컬스토리지 보존):', error.message);
+      return loadLocalRewards();
+    }
+    const list = (data || []).map(dbToReward);
+    saveLocalRewards(list);
+    return list;
+  } catch (e) {
+    return loadLocalRewards();
+  }
+}
+
+async function addReward() {
+  const titleEl = document.getElementById('input-reward-title');
+  const condEl  = document.getElementById('input-reward-condition');
+  const dateEl  = document.getElementById('input-reward-date');
+
+  const title = titleEl.value.trim();
+  if (!title) {
+    showToast('⚠️ 선물/놀기 계획 제목을 입력해주세요.', 'warning');
+    titleEl.focus();
+    return;
+  }
+
+  const newReward = {
+    id:          generateId(),
+    title,
+    condition:   condEl.value.trim(),
+    targetDate:  dateEl.value || null,
+    completed:   false,
+    completedAt: null,
+    createdAt:   new Date().toISOString(),
+  };
+
+  rewards.unshift(newReward);
+  saveLocalRewards(rewards);
+  renderRewards();
+
+  titleEl.value = '';
+  condEl.value  = '';
+  dateEl.value  = '';
+  document.getElementById('reward-add-form').classList.add('hidden');
+
+  showToast(`🎁 "${title}" 등록되었습니다! 꼭 신나게 즐기세요!`);
+
+  if (currentUser) {
+    try {
+      await supabaseClient.from('rewards').insert([rewardToDb(newReward)]);
+    } catch (e) {
+      console.warn('선물 DB 저장 실패 (로컬 유지됨):', e);
+    }
+  }
+}
+
+async function toggleRewardComplete(rewardId) {
+  const reward = rewards.find((r) => r.id === rewardId);
+  if (!reward) return;
+
+  reward.completed   = !reward.completed;
+  reward.completedAt = reward.completed ? new Date().toISOString() : null;
+
+  saveLocalRewards(rewards);
+  renderRewards();
+
+  if (reward.completed) {
+    launchConfetti();
+    showToast(`🎉 "${reward.title}" 선물 즐기기 완료! 수고한 나에게 박수! 👏`);
+  } else {
+    showToast(`선물 즐기기가 다시 대기 상태로 변경되었습니다.`);
+  }
+
+  if (currentUser) {
+    try {
+      await supabaseClient.from('rewards').update({
+        completed:    reward.completed,
+        completed_at: reward.completedAt,
+      }).eq('id', rewardId);
+    } catch (e) {
+      console.warn('선물 상태 갱신 실패:', e);
+    }
+  }
+}
+
+async function deleteReward(rewardId) {
+  const reward = rewards.find((r) => r.id === rewardId);
+  if (!reward) return;
+  if (!confirm(`"${reward.title}" 선물 계획을 삭제할까요?`)) return;
+
+  rewards = rewards.filter((r) => r.id !== rewardId);
+  saveLocalRewards(rewards);
+  renderRewards();
+  showToast('🗑️ 삭제되었습니다.');
+
+  if (currentUser) {
+    try {
+      await supabaseClient.from('rewards').delete().eq('id', rewardId);
+    } catch (e) {
+      console.warn('선물 삭제 실패:', e);
+    }
+  }
+}
+
+function renderRewards() {
+  const gridEl  = document.getElementById('rewards-grid');
+  const badgeEl = document.getElementById('rewards-count-badge');
+  if (!gridEl) return;
+
+  gridEl.innerHTML = '';
+  const activeRewards = rewards.filter((r) => !r.completed);
+  const doneRewards   = rewards.filter((r) => r.completed);
+
+  if (badgeEl) {
+    badgeEl.textContent = `${activeRewards.length}개 대기 중`;
+  }
+
+  if (rewards.length === 0) {
+    gridEl.innerHTML = `
+      <div class="col-span-full py-6 text-center text-xs text-amber-700/60 bg-white/70 rounded-xl border border-dashed border-amber-200">
+        ✨ 등록된 선물이 없습니다. 열심히 일한 나에게 줄 보상이나 주말 놀기 계획을 등록해보세요!
+      </div>
+    `;
+    return;
+  }
+
+  // 대기 중인 선물 먼저, 완료된 선물은 뒤에 정렬
+  const sorted = [...activeRewards, ...doneRewards];
+
+  sorted.forEach((reward) => {
+    const card = document.createElement('div');
+    card.className = `reward-card ${reward.completed ? 'completed' : ''}`;
+
+    const dateHtml = reward.targetDate
+      ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">🗓️ ${reward.targetDate}</span>` : '';
+
+    const condHtml = reward.condition
+      ? `<p class="text-xs text-amber-700 font-medium mt-1">🎯 조건: ${escapeHtml(reward.condition)}</p>` : '';
+
+    const completedHtml = reward.completed
+      ? `<p class="text-[11px] text-green-600 font-semibold mt-1">🎉 즐기기 완료! (${reward.completedAt ? reward.completedAt.slice(0,10) : ''})</p>` : '';
+
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-1.5 mb-1.5">
+        <h3 class="text-sm font-bold text-gray-800 break-words leading-snug flex-1 ${reward.completed ? 'line-through text-gray-400' : ''}">
+          ${escapeHtml(reward.title)}
+        </h3>
+        <button class="btn-del-reward text-gray-300 hover:text-red-500 text-xs p-0.5 transition-colors" title="삭제">✕</button>
+      </div>
+      ${condHtml}
+      <div class="mt-2 pt-2 border-t border-amber-100/80 flex items-center justify-between gap-1.5">
+        <div class="flex items-center gap-1">
+          ${dateHtml}
+        </div>
+        <button class="btn-complete-reward text-xs font-bold px-2.5 py-1 rounded-lg transition-all shadow-xs active:scale-95 ${reward.completed ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-amber-500 hover:bg-amber-600 text-white'}">
+          ${reward.completed ? '다시 대기 ↩️' : '🎉 즐기기 완료!'}
+        </button>
+      </div>
+      ${completedHtml}
+    `;
+
+    card.querySelector('.btn-complete-reward').addEventListener('click', () => toggleRewardComplete(reward.id));
+    card.querySelector('.btn-del-reward').addEventListener('click', () => deleteReward(reward.id));
+
+    gridEl.appendChild(card);
+  });
+}
+
+/** 🎊 축하 폭죽 효과 (순수 JS/CSS 파티클) */
+function launchConfetti() {
+  const colors = ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6'];
+  const particleCount = 35;
+
+  for (let i = 0; i < particleCount; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-particle';
+
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const size = Math.floor(Math.random() * 8) + 6;
+    const startX = Math.random() * window.innerWidth;
+    const startY = window.innerHeight * 0.4 + (Math.random() * 100 - 50);
+
+    const fallX = (Math.random() - 0.5) * 400 + 'px';
+    const fallY = (Math.random() * 300 + 200) + 'px';
+    const fallRot = (Math.random() * 720 - 360) + 'deg';
+    const duration = (Math.random() * 1 + 1.2) + 's';
+
+    el.style.backgroundColor = color;
+    el.style.width  = `${size}px`;
+    el.style.height = `${size * 0.7}px`;
+    el.style.left   = `${startX}px`;
+    el.style.top    = `${startY}px`;
+    el.style.setProperty('--fall-x', fallX);
+    el.style.setProperty('--fall-y', fallY);
+    el.style.setProperty('--fall-rot', fallRot);
+    el.style.animationDuration = duration;
+
+    document.body.appendChild(el);
+
+    setTimeout(() => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 2500);
+  }
+}
+
+
 
 
 /* ============================================================
@@ -1504,6 +1767,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       currentUser = null;
       tasks = [];
+      rewards = [];
       showLoginScreen();
     }
   });
@@ -1522,7 +1786,30 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add').addEventListener('click', addTask);
   document.getElementById('input-title').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTask(); });
 
+  // ── 나에게 주는 선물 & 노는 계획 (Rewards) 이벤트 ──
+  const toggleRewardBtn = document.getElementById('btn-toggle-add-reward');
+  const rewardFormEl    = document.getElementById('reward-add-form');
+  const cancelRewardBtn = document.getElementById('btn-cancel-reward');
+  const saveRewardBtn   = document.getElementById('btn-save-reward');
 
+  if (toggleRewardBtn && rewardFormEl) {
+    toggleRewardBtn.addEventListener('click', () => {
+      rewardFormEl.classList.toggle('hidden');
+      if (!rewardFormEl.classList.contains('hidden')) {
+        document.getElementById('input-reward-title').focus();
+      }
+    });
+  }
+  if (cancelRewardBtn && rewardFormEl) {
+    cancelRewardBtn.addEventListener('click', () => rewardFormEl.classList.add('hidden'));
+  }
+  if (saveRewardBtn) {
+    saveRewardBtn.addEventListener('click', addReward);
+  }
+  const rewardTitleInput = document.getElementById('input-reward-title');
+  if (rewardTitleInput) {
+    rewardTitleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addReward(); });
+  }
 
   // ── 대시보드 일간/주간 탭 ──
   document.getElementById('tab-daily').addEventListener('click', () => {
@@ -1549,5 +1836,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initCalendarPlannerEvents();
   syncTogglesToQuadrant();
 
-  console.log('🎯 아이젠하워 플래너 v5 (드래그 앤 드롭 캘린더) 준비 완료!');
+  console.log('🎯 아이젠하워 플래너 (드래그 앤 드롭 캘린더 & 선물 라운지) 준비 완료!');
 });

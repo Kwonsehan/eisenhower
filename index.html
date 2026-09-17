@@ -40,7 +40,7 @@
     };
   </script>
 
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -321,6 +321,64 @@
           </div>
         </section>
 
+        <!-- ══════════════════════════════════════════════════════════
+             🎁 나에게 주는 선물 & 노는 계획 (Play & Reward Lounge)
+        ══════════════════════════════════════════════════════════ -->
+        <section class="bg-gradient-to-r from-amber-50/80 to-orange-50/80 rounded-2xl shadow-sm border border-amber-200 p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xl sm:text-2xl">🎁</span>
+              <div>
+                <h2 class="text-sm sm:text-base font-bold text-gray-800 flex items-center gap-1.5">
+                  <span>나에게 주는 선물 & 노는 계획</span>
+                  <span id="rewards-count-badge" class="text-[11px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">0개</span>
+                </h2>
+                <p class="text-[11px] text-gray-500">열심히 일한 나를 위한 보상 & 죄책감 없이 신나게 놀기 플랜</p>
+              </div>
+            </div>
+            <button id="btn-toggle-add-reward" class="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-xl shadow-xs transition-all">
+              <span>+ 선물/놀기 등록</span>
+            </button>
+          </div>
+
+          <!-- 선물 등록 입력 폼 (토글 접이식) -->
+          <div id="reward-add-form" class="hidden mb-3 p-3 bg-white/95 rounded-xl border border-amber-200 space-y-2.5 transition-all">
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                id="input-reward-title"
+                class="flex-1 px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+                placeholder="어떤 선물을 주고 싶나요? (예: 주말 삼겹살 파티 🥩, 넷플릭스 몰아보기 🍿)"
+              />
+              <input
+                type="text"
+                id="input-reward-condition"
+                class="sm:w-56 px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+                placeholder="달성 조건 (예: Q1 3개 완료 시, 이번 주말)"
+              />
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <label class="text-xs text-gray-500 font-medium">🗓️ 즐길 날짜:</label>
+                <input
+                  type="date"
+                  id="input-reward-date"
+                  class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="btn-cancel-reward" type="button" class="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">취소</button>
+                <button id="btn-save-reward" type="button" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-xs transition-all">등록하기</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 선물/놀기 카드 목록 그리드 -->
+          <div id="rewards-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+            <!-- JS 동적 렌더링 -->
+          </div>
+        </section>
+
         <!-- 지난 완료 기록 아카이브 (접이식) -->
         <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <button id="archive-toggle-btn" class="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition-colors">
@@ -511,16 +569,16 @@
   <!-- 토스트 알림 -->
   <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg opacity-0 translate-y-2 transition-all duration-300 pointer-events-none z-[60]">알림</div>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 
   <!-- Service Worker 등록 -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=11')
+        navigator.serviceWorker.register('./sw.js?v=12')
           .then(reg => {
             reg.update();
-            console.log('[PWA] SW v11 갱신:', reg.scope);
+            console.log('[PWA] SW v12 갱신:', reg.scope);
           })
           .catch(err => console.warn('[PWA] SW 실패:', err));
       });

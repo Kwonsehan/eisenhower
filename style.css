@@ -392,12 +392,45 @@ button, select, input {
   background-color: #fffaf0 !important;
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.12);
 }
-.q2-imminent-banner {
-  animation: fadeInDown 0.3s ease-out;
+/* ─── 나에게 주는 선물 & 노는 계획 (Play & Reward) 스타일 ─── */
+.reward-card {
+  background: white;
+  border-radius: 0.875rem;
+  border: 1px solid #fed7aa;
+  padding: 0.75rem 0.875rem;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
 }
-@keyframes fadeInDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+.reward-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
 }
+.reward-card.completed {
+  background-color: #fefce8;
+  border-color: #fef08a;
+  opacity: 0.8;
+}
+
+/* ─── 폭죽 축하 효과 (Confetti) ─── */
+.confetti-particle {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: 3px;
+  animation: confettiFall linear forwards;
+}
+@keyframes confettiFall {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--fall-x, 0), var(--fall-y, 300px)) rotate(var(--fall-rot, 360deg)) scale(0.6);
+  }
+}
+
 
 
