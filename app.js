@@ -1289,14 +1289,26 @@ let toastTimer = null;
 
 function showToast(message, type = 'default') {
   const toast = document.getElementById('toast');
+  if (!toast) return;
   if (toastTimer) clearTimeout(toastTimer);
-  toast.className = 'fixed bottom-5 right-5 text-sm px-4 py-2.5 rounded-xl shadow-lg transition-all duration-300 z-[60]';
-  if (type === 'error')        toast.classList.add('bg-red-600', 'text-white');
-  else if (type === 'warning') toast.classList.add('bg-orange-500', 'text-white');
-  else                         toast.classList.add('bg-gray-800', 'text-white');
+
+  // 알림 종류별 배경 색상 지정
+  let bgClass = 'bg-gray-800 text-white';
+  if (type === 'error')        bgClass = 'bg-red-600 text-white';
+  else if (type === 'warning') bgClass = 'bg-orange-500 text-white';
+
+  toast.className = `fixed bottom-5 right-5 text-sm px-4 py-2.5 rounded-xl shadow-lg z-[60] ${bgClass}`;
   toast.textContent = message;
-  toast.classList.add('show');
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+
+  // 다음 프레임에서 show 클래스를 붙여 부드럽게 나타나게 함
+  requestAnimationFrame(() => {
+    toast.classList.add('show');
+  });
+
+  // 사용자 요청: 1초(1000ms) 후 자동으로 사라짐
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 1000);
 }
 
 

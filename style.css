@@ -306,7 +306,17 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 .panel-badge-Q3 { background: #fef9c3; color: #a16207; }
 .panel-badge-Q4 { background: #f3f4f6; color: #4b5563; }
 
-#toast.show { opacity: 1 !important; transform: translateY(0) !important; }
+#toast {
+  opacity: 0 !important;
+  transform: translateY(12px) !important;
+  pointer-events: none !important;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#toast.show {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+}
 #import-modal.active { display: flex !important; }
 
 .quadrant-panel[data-quadrant="Q1"] input[type="checkbox"].task-check { accent-color: #ef4444; }
