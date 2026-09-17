@@ -441,12 +441,13 @@ async function addTask() {
     createdAt:     new Date().toISOString(),
   };
 
-  tasks.push(newTask);
-  renderAll();
-
+  // 사용자 편의: 엔터나 추가 클릭 즉시 입력창을 비워 다음 입력을 바로 할 수 있도록 보장
   titleEl.value = '';
   document.getElementById('input-due').value = '';
   titleEl.focus();
+
+  tasks.push(newTask);
+  renderAll();
 
   try {
     await insertTaskToDB(newTask);
@@ -889,7 +890,7 @@ function renderCalendarDrawer() {
     block.className = `drawer-task-block ${task.quadrant.toLowerCase()} ${isSelected ? 'block-selected' : ''}`;
     block.dataset.id = task.id;
     block.draggable  = true;
-
+    const dueBadgeType = getDueBadgeType(task.dueDate);
     const dueHtml = task.dueDate
       ? `<span class="due-badge ${dueBadgeType} text-[10px]">${formatDueDate(task.dueDate)}</span>` : '';
     
