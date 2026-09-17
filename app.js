@@ -876,9 +876,9 @@ function renderCalendarMonth() {
 
   const dowClasses = ['sunday','','','','','','saturday'];
 
-  let html = `<div class="cal-month-grid">`;
+  let html = `<div class="cal-month-grid grid grid-cols-7 w-full border-t border-l border-gray-200">`;
   DAY_LABELS.forEach((label, i) => {
-    html += `<div class="cal-month-header ${dowClasses[i]}">${label}</div>`;
+    html += `<div class="cal-month-header ${dowClasses[i]} text-center py-2 text-xs font-semibold bg-gray-50 border-r border-b border-gray-200">${label}</div>`;
   });
 
   cells.forEach(({ date, isCurrentMonth }) => {
@@ -887,15 +887,15 @@ function renderCalendarMonth() {
     const dayNum  = dateObj.getDate();
     const isToday = date === today;
 
-    let cellCls = 'cal-month-cell cal-drop-zone';
-    if (!isCurrentMonth) cellCls += ' other-month';
-    if (isToday)         cellCls += ' today';
+    let cellCls = 'cal-month-cell cal-drop-zone min-h-[90px] p-1.5 border-r border-b border-gray-200 bg-white flex flex-col transition-colors';
+    if (!isCurrentMonth) cellCls += ' other-month bg-gray-50/70 text-gray-300';
+    if (isToday)         cellCls += ' today bg-blue-50/50';
     if (dow === 0)       cellCls += ' sunday';
     if (dow === 6)       cellCls += ' saturday';
 
     html += `
       <div class="${cellCls}" data-date="${date}">
-        <div class="cal-date-num">${dayNum}</div>
+        <div class="cal-date-num font-bold text-xs mb-1 w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-gray-600'}">${dayNum}</div>
         <div class="cal-chips-container flex-1 min-h-[30px]" data-date="${date}"></div>
       </div>
     `;
@@ -938,7 +938,7 @@ function renderCalendarWeek() {
   const today = getTodayStr();
   const dowClasses = ['sunday','','','','','','saturday'];
 
-  let html = `<div class="cal-week-grid">`;
+  let html = `<div class="cal-week-grid grid grid-cols-7 w-full border-t border-l border-gray-200">`;
 
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
@@ -947,18 +947,18 @@ function renderCalendarWeek() {
     const dow     = d.getDay();
     const isToday = dateStr === today;
 
-    let hCls = 'cal-week-header';
-    if (isToday) hCls += ' today';
-    if (dow === 0) hCls += ' sunday';
-    if (dow === 6) hCls += ' saturday';
+    let hCls = 'cal-week-header py-2 text-center border-b border-r border-gray-200 bg-gray-50';
+    if (isToday) hCls += ' today bg-blue-50/60';
+    if (dow === 0) hCls += ' sunday text-red-500';
+    if (dow === 6) hCls += ' saturday text-blue-500';
 
     html += `
-      <div class="cal-week-col cal-drop-zone" data-date="${dateStr}">
+      <div class="cal-week-col cal-drop-zone min-h-[360px] border-r border-b border-gray-200 flex flex-col bg-white" data-date="${dateStr}">
         <div class="${hCls}">
-          <div class="week-day-name">${DAY_LABELS[dow]}</div>
-          <div class="week-day-num">${d.getDate()}</div>
+          <div class="week-day-name text-[11px] font-semibold text-gray-500">${DAY_LABELS[dow]}</div>
+          <div class="week-day-num text-sm font-bold mt-0.5 w-6 h-6 mx-auto flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-gray-700'}">${d.getDate()}</div>
         </div>
-        <div class="cal-week-content space-y-1.5 flex-1" data-date="${dateStr}"></div>
+        <div class="cal-week-content p-1.5 space-y-1.5 flex-1" data-date="${dateStr}"></div>
       </div>
     `;
   }

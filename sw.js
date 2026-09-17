@@ -7,7 +7,7 @@
    - 캐시 버전을 올려 이전의 낡은 캐시를 즉시 완전히 삭제합니다.
 ============================================================ */
 
-const CACHE_NAME = 'eisenhower-v5';
+const CACHE_NAME = 'eisenhower-v6';
 
 const FILES_TO_CACHE = [
   './',
