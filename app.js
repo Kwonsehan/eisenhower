@@ -1,5 +1,6 @@
 /* ============================================================
-   app.js - 아이젠하워 매트릭스 앱 (단일 화면 & 스마트 코칭 시스템)
+   app.js - 아이젠하워 매트릭스 & 캘린더 플래너 v5
+   (드래그 앤 드롭 일정 배정 & 월/주 연동 & 스마트 코칭)
 ============================================================ */
 
 'use strict';
@@ -12,7 +13,6 @@
 const SUPABASE_URL      = 'https://xtuanrjjdzstqzoitesb.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dWFucmpqZHpzdHF6b2l0ZXNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MjEyMzgsImV4cCI6MjEwNTE5NzIzOH0.DVjT-eFQQOhMF2bFisdh-INm1EbWMH3-swQ1hKdsxvw';
 
-// window.supabase와의 충돌을 피하기 위해 supabaseClient로 선언
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -25,10 +25,17 @@ const REDIRECT_URL = 'https://kwonsehan.github.io/eisenhower/';
 
 let tasks           = [];         // 현재 로드된 할 일 목록
 let currentUser     = null;       // 로그인 사용자
+let currentMainTab  = 'matrix';   // 'matrix' | 'calendar'
 let dashboardTab    = 'daily';    // 'daily' | 'weekly'
 let openPanelTaskId = null;       // 열린 상세 패널 ID
 let q2Chart         = null;       // Chart.js 인스턴스
 let isArchiveOpen   = false;      // 아코디언 펼침 여부
+
+// ── 캘린더 플래너 상태 ──
+let calViewMode          = 'month';  // 'month' | 'week'
+let calBaseDate          = new Date();
+let calFilterQuadrant    = 'ALL';    // 'ALL' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
+let selectedBlockIdForMobile = null; // 모바일 원터치 배정용 선택된 블록 ID
 
 
 /* ============================================================
@@ -42,6 +49,8 @@ const QUADRANT_INFO = {
   Q4: { label: 'Q4 ⚪ 제거 대상',   emoji: '🗑️', badgeClass: 'panel-badge-Q4' },
 };
 
+const DAY_LABELS = ['일','월','화','수','목','금','토'];
+
 function generateId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -51,6 +60,16 @@ function generateId() {
 }
 
 function getTodayStr() { return new Date().toISOString().slice(0, 10); }
+
+function toDateStr(date) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth()+1)}-${p(date.getDate())}`;
+}
+
+function parseLocalDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 function getWeekRange(baseDate = new Date()) {
   const d   = new Date(baseDate);
@@ -96,33 +115,35 @@ function escapeHtml(str) {
 
 
 /* ============================================================
-   4. DB ↔ 앱 데이터 매핑
+   4. DB ↔ 앱 데이터 매핑 (scheduled_date 포함)
 ============================================================ */
 
 function dbToTask(row) {
   return {
-    id:          row.id,
-    title:       row.title,
-    quadrant:    row.quadrant,
-    dueDate:     row.due_date     || null,
-    memo:        row.memo         || '',
-    completed:   row.completed,
-    completedAt: row.completed_at || null,
-    createdAt:   row.created_at,
+    id:            row.id,
+    title:         row.title,
+    quadrant:      row.quadrant,
+    dueDate:       row.due_date       || null, // 마감일 (데드라인)
+    scheduledDate: row.scheduled_date || null, // 실행 예정일 (캘린더 배정 날짜)
+    memo:          row.memo           || '',
+    completed:     row.completed,
+    completedAt:   row.completed_at   || null,
+    createdAt:     row.created_at,
   };
 }
 
 function taskToDb(task) {
   return {
-    id:           task.id,
-    user_id:      currentUser.id,
-    title:        task.title,
-    quadrant:     task.quadrant,
-    due_date:     task.dueDate     || null,
-    memo:         task.memo        || '',
-    completed:    task.completed,
-    completed_at: task.completedAt || null,
-    created_at:   task.createdAt,
+    id:             task.id,
+    user_id:        currentUser.id,
+    title:          task.title,
+    quadrant:       task.quadrant,
+    due_date:       task.dueDate       || null,
+    scheduled_date: task.scheduledDate || null,
+    memo:           task.memo          || '',
+    completed:      task.completed,
+    completed_at:   task.completedAt   || null,
+    created_at:     task.createdAt,
   };
 }
 
@@ -149,12 +170,13 @@ async function insertTaskToDB(task) {
 
 async function updateTaskInDB(taskId, fields) {
   const dbFields = {};
-  if (fields.title       !== undefined) dbFields.title        = fields.title;
-  if (fields.quadrant    !== undefined) dbFields.quadrant     = fields.quadrant;
-  if (fields.dueDate     !== undefined) dbFields.due_date     = fields.dueDate;
-  if (fields.memo        !== undefined) dbFields.memo         = fields.memo;
-  if (fields.completed   !== undefined) dbFields.completed    = fields.completed;
-  if (fields.completedAt !== undefined) dbFields.completed_at = fields.completedAt;
+  if (fields.title         !== undefined) dbFields.title          = fields.title;
+  if (fields.quadrant      !== undefined) dbFields.quadrant       = fields.quadrant;
+  if (fields.dueDate       !== undefined) dbFields.due_date       = fields.dueDate;
+  if (fields.scheduledDate !== undefined) dbFields.scheduled_date = fields.scheduledDate;
+  if (fields.memo          !== undefined) dbFields.memo           = fields.memo;
+  if (fields.completed     !== undefined) dbFields.completed      = fields.completed;
+  if (fields.completedAt   !== undefined) dbFields.completed_at   = fields.completedAt;
 
   const { error } = await supabaseClient
     .from('tasks')
@@ -229,7 +251,7 @@ function showLoadingScreen() {
 
 
 /* ============================================================
-   7. 렌더링 & 화면 동기화
+   7. 렌더링 & 동기화
 ============================================================ */
 
 async function loadAndRender() {
@@ -256,6 +278,11 @@ function createTaskCard(task) {
   const dueBadgeType = getDueBadgeType(task.dueDate);
   const dueBadgeHtml = task.dueDate
     ? `<span class="due-badge ${dueBadgeType}">${formatDueDate(task.dueDate)}</span>` : '';
+  
+  // 실행 예정일이 캘린더에 배정된 경우 뱃지 표시
+  const scheduledHtml = task.scheduledDate
+    ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium ml-1">🗓️ ${task.scheduledDate}</span>` : '';
+
   const completedHtml = task.completed && task.completedAt
     ? `<p class="text-xs text-gray-400 mt-1">✅ ${formatCompletedAt(task.completedAt)} 완료</p>` : '';
 
@@ -264,7 +291,10 @@ function createTaskCard(task) {
       <input type="checkbox" class="task-check mt-0.5 flex-shrink-0" ${task.completed ? 'checked' : ''} title="완료로 표시" />
       <div class="flex-1 min-w-0 cursor-pointer" data-open-panel>
         <p class="task-title text-sm font-medium text-gray-800 leading-snug break-words">${escapeHtml(task.title)}</p>
-        ${dueBadgeHtml ? `<div class="mt-1">${dueBadgeHtml}</div>` : ''}
+        <div class="mt-1 flex flex-wrap gap-1 items-center">
+          ${dueBadgeHtml}
+          ${scheduledHtml}
+        </div>
         ${completedHtml}
       </div>
       <div class="flex items-center gap-1 flex-shrink-0 relative">
@@ -277,6 +307,7 @@ function createTaskCard(task) {
 }
 
 function renderAll() {
+  // 1) 2x2 매트릭스 렌더링
   ['Q1', 'Q2', 'Q3', 'Q4'].forEach((q) => {
     const listEl = document.getElementById(`list-${q}`);
     listEl.innerHTML = '';
@@ -294,8 +325,12 @@ function renderAll() {
     document.getElementById(`count-${q}`).textContent = `${qTasks.length}개`;
   });
 
+  // 2) 대시보드 & 코칭
   updateDashboard();
   renderCompletedArchive();
+
+  // 3) 캘린더 플래너 렌더링 (캘린더 탭일 때 또는 백그라운드 동기화)
+  renderCalendarPlanner();
 }
 
 
@@ -313,14 +348,15 @@ async function addTask() {
   }
 
   const newTask = {
-    id:          generateId(),
+    id:            generateId(),
     title,
-    quadrant:    document.getElementById('input-quadrant').value,
-    dueDate:     document.getElementById('input-due').value || null,
-    memo:        '',
-    completed:   false,
-    completedAt: null,
-    createdAt:   new Date().toISOString(),
+    quadrant:      document.getElementById('input-quadrant').value,
+    dueDate:       document.getElementById('input-due').value || null,
+    scheduledDate: null,
+    memo:          '',
+    completed:     false,
+    completedAt:   null,
+    createdAt:     new Date().toISOString(),
   };
 
   tasks.push(newTask);
@@ -414,6 +450,15 @@ async function updateTask(taskId, fields) {
   }
 }
 
+/** 캘린더 날짜 배정 (Scheduled Date 업데이트) */
+async function scheduleTaskDate(taskId, targetDateStr) {
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  await updateTask(taskId, { scheduledDate: targetDateStr });
+  showToast(`📅 "${task.title}" 일정이 ${targetDateStr}로 배정되었습니다!`);
+}
+
 
 /* ============================================================
    9. 카드 이벤트 & 드래그앤드롭
@@ -475,10 +520,6 @@ function initDragAndDrop() {
    10. 💡 실시간 지능형 행동 코칭 & 대시보드
 ============================================================ */
 
-/**
- * 완료된 작업들의 사분면 분포를 분석하여
- * 행동 변화를 이끄는 직관적인 코칭 피드백을 생성합니다.
- */
 function generateCoachingFeedback(completedTasks) {
   const total = completedTasks.length;
 
@@ -489,7 +530,6 @@ function generateCoachingFeedback(completedTasks) {
   const titleEl = document.getElementById('coaching-title');
   const descEl  = document.getElementById('coaching-desc');
 
-  // 이전 테마 클래스 제거
   cardEl.className = 'coaching-box rounded-2xl p-4 border transition-all duration-300';
 
   if (total === 0) {
@@ -511,7 +551,6 @@ function generateCoachingFeedback(completedTasks) {
   const q4Pct = Math.round((counts.Q4 / total) * 100);
   const urgentTotalPct = q1Pct + q3Pct;
 
-  // 1. 소방수 모드 (긴급 작업 Q1+Q3 비중이 60% 이상이거나 Q1이 50% 이상)
   if (urgentTotalPct >= 60 || q1Pct >= 50) {
     cardEl.classList.add('coaching-theme-firefighter');
     iconEl.textContent  = '🔥';
@@ -522,7 +561,6 @@ function generateCoachingFeedback(completedTasks) {
     return;
   }
 
-  // 2. 방패 모드 (Q3: 긴급하지만 중요하지 않은 일 비중이 30% 이상)
   if (q3Pct >= 30) {
     cardEl.classList.add('coaching-theme-shield');
     iconEl.textContent  = '🛡️';
@@ -533,7 +571,6 @@ function generateCoachingFeedback(completedTasks) {
     return;
   }
 
-  // 3. 전략가 모드 (Q2: 중요하지만 긴급하지 않은 일 비중이 35% 이상)
   if (q2Pct >= 35) {
     cardEl.classList.add('coaching-theme-strategist');
     iconEl.textContent  = '🌟';
@@ -544,7 +581,6 @@ function generateCoachingFeedback(completedTasks) {
     return;
   }
 
-  // 4. 번아웃/도피 모드 (Q4: 긴급하지도 중요하지도 않은 일 비중이 25% 이상)
   if (q4Pct >= 25) {
     cardEl.classList.add('coaching-theme-burnout');
     iconEl.textContent  = '🪤';
@@ -555,7 +591,6 @@ function generateCoachingFeedback(completedTasks) {
     return;
   }
 
-  // 5. 균형 모드 (기본)
   cardEl.classList.add('coaching-theme-start');
   iconEl.textContent  = '⚖️';
   badgeEl.textContent = '균형 모드';
@@ -653,13 +688,13 @@ function updateQ2Chart(filteredTasks) {
 
 
 /* ============================================================
-   11. 📦 지난 완료 기록 아카이브 (접이식 아코디언)
+   11. 📦 지난 완료 기록 아카이브 (접이식)
 ============================================================ */
 
 function renderCompletedArchive() {
   const completedTasks = tasks
     .filter((t) => t.completed && t.completedAt)
-    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt)); // 최신 완료순 정렬
+    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
 
   document.getElementById('archive-count').textContent = `${completedTasks.length}개`;
   const listEl = document.getElementById('archive-list');
@@ -703,7 +738,379 @@ function initArchiveToggle() {
 
 
 /* ============================================================
-   12. 상세 편집 슬라이드 패널
+   12. 📅 [NEW] 캘린더 플래너 (드래그 앤 드롭 일정 배정 시스템)
+============================================================ */
+
+/** 캘린더 플래너 전체 화면 다시 그리기 */
+function renderCalendarPlanner() {
+  renderCalendarDrawer();
+  if (calViewMode === 'month') {
+    renderCalendarMonth();
+  } else {
+    renderCalendarWeek();
+  }
+  updateCalPeriodLabel();
+}
+
+/** 툴바의 연/월/주간 라벨 업데이트 */
+function updateCalPeriodLabel() {
+  const d = calBaseDate;
+  const labelEl = document.getElementById('cal-period-label');
+  if (calViewMode === 'month') {
+    labelEl.textContent = `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+  } else {
+    const { start, end } = getWeekRange(d);
+    labelEl.textContent = `${start.slice(5)} ~ ${end.slice(5)}`;
+  }
+}
+
+/** 1) 좌측 할 일 블록 서랍 렌더링 */
+function renderCalendarDrawer() {
+  const drawerListEl = document.getElementById('cal-drawer-list');
+  const countEl      = document.getElementById('cal-drawer-count');
+
+  // 미완료 작업들을 사분면 필터에 맞게 분류
+  let drawerTasks = tasks.filter((t) => !t.completed);
+  if (calFilterQuadrant !== 'ALL') {
+    drawerTasks = drawerTasks.filter((t) => t.quadrant === calFilterQuadrant);
+  }
+
+  // 아직 날짜가 미배정된 작업(Unscheduled)을 맨 위로, 그 다음 배정된 작업 정렬
+  drawerTasks.sort((a, b) => {
+    if (!a.scheduledDate && b.scheduledDate) return -1;
+    if (a.scheduledDate && !b.scheduledDate) return 1;
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  countEl.textContent = `${drawerTasks.length}개`;
+
+  if (drawerTasks.length === 0) {
+    drawerListEl.innerHTML = `<p class="text-xs text-gray-400 text-center py-6">대기 중인 할 일이 없습니다.</p>`;
+    return;
+  }
+
+  drawerListEl.innerHTML = '';
+
+  drawerTasks.forEach((task) => {
+    const block = document.createElement('div');
+    const isSelected = (selectedBlockIdForMobile === task.id);
+    block.className = `drawer-task-block ${task.quadrant.toLowerCase()} ${isSelected ? 'block-selected' : ''}`;
+    block.dataset.id = task.id;
+    block.draggable  = true;
+
+    const dueBadgeType = getDueBadgeType(task.dueDate);
+    const dueHtml = task.dueDate
+      ? `<span class="due-badge ${dueBadgeType} text-[10px]">${formatDueDate(task.dueDate)}</span>` : '';
+    
+    const schedHtml = task.scheduledDate
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">🗓️ 배정됨: ${task.scheduledDate.slice(5)}</span>`
+      : `<span class="text-[10px] text-gray-400">미배정</span>`;
+
+    block.innerHTML = `
+      <div class="flex items-start justify-between gap-1">
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-gray-800 break-words leading-tight">${escapeHtml(task.title)}</p>
+          <div class="mt-1 flex flex-wrap gap-1 items-center">
+            ${dueHtml}
+            ${schedHtml}
+          </div>
+        </div>
+        <span class="text-gray-300 text-xs select-none">⠿</span>
+      </div>
+    `;
+
+    // ── PC 드래그 시작 이벤트 ──
+    block.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', task.id);
+      e.dataTransfer.effectAllowed = 'move';
+      block.classList.add('dragging');
+    });
+    block.addEventListener('dragend', () => {
+      block.classList.remove('dragging');
+      document.querySelectorAll('.cal-month-cell, .cal-week-col').forEach((c) => c.classList.remove('drag-over'));
+    });
+
+    // ── 모바일 터치 배정을 위한 탭(클릭) 선택 이벤트 ──
+    block.addEventListener('click', () => {
+      if (selectedBlockIdForMobile === task.id) {
+        selectedBlockIdForMobile = null;
+        showToast('선택 해제되었습니다.');
+      } else {
+        selectedBlockIdForMobile = task.id;
+        showToast(`📌 "${task.title}" 선택됨! 캘린더의 원하는 날짜를 터치하세요.`);
+      }
+      renderCalendarDrawer();
+    });
+
+    drawerListEl.appendChild(block);
+  });
+}
+
+/** 2) 우측 월간 캘린더 렌더링 */
+function renderCalendarMonth() {
+  const gridArea = document.getElementById('cal-grid-area');
+  const year     = calBaseDate.getFullYear();
+  const month    = calBaseDate.getMonth();
+  const today    = getTodayStr();
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const startDow = firstDay.getDay();
+
+  const cells = [];
+  // 이전 달 날짜
+  for (let i = 0; i < startDow; i++) {
+    const d = new Date(year, month, -startDow + i + 1);
+    cells.push({ date: toDateStr(d), isCurrentMonth: false });
+  }
+  // 이번 달 날짜
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    cells.push({ date: toDateStr(new Date(year, month, d)), isCurrentMonth: true });
+  }
+  // 다음 달 날짜 (7의 배수 맞추기)
+  while (cells.length % 7 !== 0) {
+    const last = new Date(cells[cells.length-1].date);
+    last.setDate(last.getDate() + 1);
+    cells.push({ date: toDateStr(last), isCurrentMonth: false });
+  }
+
+  const dowClasses = ['sunday','','','','','','saturday'];
+
+  let html = `<div class="cal-month-grid">`;
+  DAY_LABELS.forEach((label, i) => {
+    html += `<div class="cal-month-header ${dowClasses[i]}">${label}</div>`;
+  });
+
+  cells.forEach(({ date, isCurrentMonth }) => {
+    const dateObj = parseLocalDate(date);
+    const dow     = dateObj.getDay();
+    const dayNum  = dateObj.getDate();
+    const isToday = date === today;
+
+    let cellCls = 'cal-month-cell cal-drop-zone';
+    if (!isCurrentMonth) cellCls += ' other-month';
+    if (isToday)         cellCls += ' today';
+    if (dow === 0)       cellCls += ' sunday';
+    if (dow === 6)       cellCls += ' saturday';
+
+    html += `
+      <div class="${cellCls}" data-date="${date}">
+        <div class="cal-date-num">${dayNum}</div>
+        <div class="cal-chips-container flex-1 min-h-[30px]" data-date="${date}"></div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  gridArea.innerHTML = html;
+
+  // 각 날짜 칸에 해당하는 할 일들을 축소 칩으로 배치 & 드롭 리스너 바인딩
+  gridArea.querySelectorAll('.cal-month-cell').forEach((cell) => {
+    const cellDate = cell.dataset.date;
+    const chipsContainer = cell.querySelector('.cal-chips-container');
+
+    // 해당 날짜에 실행 배정(scheduledDate)된 작업들
+    const cellTasks = tasks.filter((t) => t.scheduledDate === cellDate);
+    cellTasks.forEach((task) => {
+      const chip = createCalendarChip(task);
+      chipsContainer.appendChild(chip);
+    });
+
+    // 드래그 오버 & 드롭 바인딩
+    bindDropEventsToCell(cell, cellDate);
+
+    // 모바일 클릭 시 원터치 배정 지원
+    cell.addEventListener('click', (e) => {
+      // 칩 내부 클릭이 아닌 날짜 셀 클릭 시
+      if (e.target.closest('.cal-task-chip')) return;
+      if (selectedBlockIdForMobile) {
+        scheduleTaskDate(selectedBlockIdForMobile, cellDate);
+        selectedBlockIdForMobile = null;
+        renderCalendarPlanner();
+      }
+    });
+  });
+}
+
+/** 3) 우측 주간 캘린더 렌더링 */
+function renderCalendarWeek() {
+  const gridArea = document.getElementById('cal-grid-area');
+  const { monday } = getWeekRange(calBaseDate);
+  const today = getTodayStr();
+  const dowClasses = ['sunday','','','','','','saturday'];
+
+  let html = `<div class="cal-week-grid">`;
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateStr = toDateStr(d);
+    const dow     = d.getDay();
+    const isToday = dateStr === today;
+
+    let hCls = 'cal-week-header';
+    if (isToday) hCls += ' today';
+    if (dow === 0) hCls += ' sunday';
+    if (dow === 6) hCls += ' saturday';
+
+    html += `
+      <div class="cal-week-col cal-drop-zone" data-date="${dateStr}">
+        <div class="${hCls}">
+          <div class="week-day-name">${DAY_LABELS[dow]}</div>
+          <div class="week-day-num">${d.getDate()}</div>
+        </div>
+        <div class="cal-week-content space-y-1.5 flex-1" data-date="${dateStr}"></div>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  gridArea.innerHTML = html;
+
+  gridArea.querySelectorAll('.cal-week-col').forEach((col) => {
+    const colDate = col.dataset.date;
+    const contentEl = col.querySelector('.cal-week-content');
+
+    const colTasks = tasks.filter((t) => t.scheduledDate === colDate);
+    colTasks.forEach((task) => {
+      const chip = createCalendarChip(task);
+      contentEl.appendChild(chip);
+    });
+
+    bindDropEventsToCell(col, colDate);
+
+    col.addEventListener('click', (e) => {
+      if (e.target.closest('.cal-task-chip')) return;
+      if (selectedBlockIdForMobile) {
+        scheduleTaskDate(selectedBlockIdForMobile, colDate);
+        selectedBlockIdForMobile = null;
+        renderCalendarPlanner();
+      }
+    });
+  });
+}
+
+/** 캘린더 내부 축소 칩(Chip) DOM 생성 */
+function createCalendarChip(task) {
+  const chip = document.createElement('div');
+  chip.className = `cal-task-chip ${task.quadrant.toLowerCase()} ${task.completed ? 'completed' : ''}`;
+  chip.dataset.id = task.id;
+  chip.draggable  = true;
+
+  const dueBadgeType = getDueBadgeType(task.dueDate);
+  const dueTagHtml = task.dueDate && dueBadgeType === 'overdue'
+    ? `<span class="text-[9px] bg-red-500 text-white px-1 rounded font-bold">마감초과</span>`
+    : task.dueDate && dueBadgeType === 'today'
+    ? `<span class="text-[9px] bg-orange-500 text-white px-1 rounded font-bold">오늘마감</span>`
+    : '';
+
+  chip.innerHTML = `
+    <input type="checkbox" class="task-check mr-1" ${task.completed ? 'checked' : ''} title="완료 처리" />
+    <span class="chip-title">${escapeHtml(task.title)}</span>
+    ${dueTagHtml}
+  `;
+
+  // 칩 내부 체크박스
+  chip.querySelector('.task-check').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleComplete(task.id);
+  });
+
+  // 칩 클릭 시 상세 패널 열기
+  chip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDetailPanel(task.id);
+  });
+
+  // 칩 자체도 다른 날짜로 드래그 이동 가능!
+  chip.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+    chip.classList.add('dragging');
+  });
+  chip.addEventListener('dragend', () => {
+    chip.classList.remove('dragging');
+    document.querySelectorAll('.cal-drop-zone').forEach((c) => c.classList.remove('drag-over'));
+  });
+
+  return chip;
+}
+
+/** 날짜 칸 드래그오버 / 드롭 이벤트 바인딩 */
+function bindDropEventsToCell(cellEl, targetDateStr) {
+  cellEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    cellEl.classList.add('drag-over');
+  });
+  cellEl.addEventListener('dragleave', (e) => {
+    if (!cellEl.contains(e.relatedTarget)) cellEl.classList.remove('drag-over');
+  });
+  cellEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    cellEl.classList.remove('drag-over');
+    const taskId = e.dataTransfer.getData('text/plain');
+    if (!taskId) return;
+    scheduleTaskDate(taskId, targetDateStr);
+  });
+}
+
+/** 캘린더 플래너 UI 이벤트 초기화 */
+function initCalendarPlannerEvents() {
+  // 월간/주간 전환
+  document.getElementById('cal-view-month').addEventListener('click', () => {
+    calViewMode = 'month';
+    setCalViewBtn('month');
+    renderCalendarPlanner();
+  });
+  document.getElementById('cal-view-week').addEventListener('click', () => {
+    calViewMode = 'week';
+    setCalViewBtn('week');
+    renderCalendarPlanner();
+  });
+
+  // 네비게이션
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() - 1);
+    else calBaseDate.setDate(calBaseDate.getDate() - 7);
+    renderCalendarPlanner();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() + 1);
+    else calBaseDate.setDate(calBaseDate.getDate() + 7);
+    renderCalendarPlanner();
+  });
+  document.getElementById('cal-today').addEventListener('click', () => {
+    calBaseDate = new Date();
+    renderCalendarPlanner();
+  });
+
+  // 서랍 사분면 필터 버튼
+  document.querySelectorAll('.drawer-filter-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.drawer-filter-btn').forEach((b) => {
+        b.classList.remove('active', 'bg-white', 'text-gray-800', 'shadow-sm');
+      });
+      btn.classList.add('active', 'bg-white', 'text-gray-800', 'shadow-sm');
+      calFilterQuadrant = btn.dataset.filter;
+      renderCalendarDrawer();
+    });
+  });
+}
+
+function setCalViewBtn(mode) {
+  ['month', 'week'].forEach((m) => {
+    const btn = document.getElementById(`cal-view-${m}`);
+    const active = (m === mode);
+    btn.classList.toggle('active', active);
+    btn.classList.toggle('bg-white', active);
+    btn.classList.toggle('text-blue-600', active);
+    btn.classList.toggle('shadow-sm', active);
+    btn.classList.toggle('text-gray-500', !active);
+  });
+}
+
+
+/* ============================================================
+   13. 상세 편집 슬라이드 패널
 ============================================================ */
 
 function openDetailPanel(taskId) {
@@ -711,10 +1118,11 @@ function openDetailPanel(taskId) {
   if (!task) return;
   openPanelTaskId = taskId;
 
-  document.getElementById('detail-title').value    = task.title || '';
-  document.getElementById('detail-quadrant').value = task.quadrant || 'Q1';
-  document.getElementById('detail-due').value      = task.dueDate || '';
-  document.getElementById('detail-memo').value     = task.memo || '';
+  document.getElementById('detail-title').value     = task.title || '';
+  document.getElementById('detail-quadrant').value  = task.quadrant || 'Q1';
+  document.getElementById('detail-due').value       = task.dueDate || '';
+  document.getElementById('detail-scheduled').value = task.scheduledDate || '';
+  document.getElementById('detail-memo').value      = task.memo || '';
 
   const badge = document.getElementById('detail-quadrant-badge');
   badge.textContent = QUADRANT_INFO[task.quadrant].label;
@@ -745,10 +1153,11 @@ async function saveDetailPanel() {
   if (!newTitle) { showToast('⚠️ 제목을 입력해주세요.', 'warning'); return; }
 
   await updateTask(openPanelTaskId, {
-    title:    newTitle,
-    quadrant: document.getElementById('detail-quadrant').value,
-    dueDate:  document.getElementById('detail-due').value || null,
-    memo:     document.getElementById('detail-memo').value.trim(),
+    title:         newTitle,
+    quadrant:      document.getElementById('detail-quadrant').value,
+    dueDate:       document.getElementById('detail-due').value || null,
+    scheduledDate: document.getElementById('detail-scheduled').value || null,
+    memo:          document.getElementById('detail-memo').value.trim(),
   });
 
   closeDetailPanel();
@@ -765,12 +1174,12 @@ function initDetailPanel() {
 
 
 /* ============================================================
-   13. Export / Import
+   14. Export / Import
 ============================================================ */
 
 function exportTasks() {
   if (tasks.length === 0) { showToast('⚠️ 내보낼 할 일이 없습니다.', 'warning'); return; }
-  const exportData = { exportedAt: new Date().toISOString(), version: '4.0', count: tasks.length, tasks };
+  const exportData = { exportedAt: new Date().toISOString(), version: '5.0', count: tasks.length, tasks };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a'); a.href = url; a.download = `tasks_${getTodayStr()}.json`;
@@ -826,7 +1235,7 @@ async function executeImport(mode) {
 
 
 /* ============================================================
-   14. 토스트 알림
+   15. 토스트 알림
 ============================================================ */
 
 let toastTimer = null;
@@ -845,8 +1254,30 @@ function showToast(message, type = 'default') {
 
 
 /* ============================================================
-   15. 토글 연동
+   16. 메인 탭 전환 & 토글 연동
 ============================================================ */
+
+function switchMainTab(tab) {
+  currentMainTab = tab;
+  document.getElementById('view-matrix').classList.toggle('hidden', tab !== 'matrix');
+  document.getElementById('view-calendar').classList.toggle('hidden', tab !== 'calendar');
+
+  const matrixBtn = document.getElementById('main-tab-matrix');
+  const calBtn    = document.getElementById('main-tab-calendar');
+
+  if (tab === 'matrix') {
+    matrixBtn.classList.add('active', 'border-blue-600', 'text-blue-600');
+    matrixBtn.classList.remove('border-transparent', 'text-gray-400');
+    calBtn.classList.remove('active', 'border-blue-600', 'text-blue-600');
+    calBtn.classList.add('border-transparent', 'text-gray-400');
+  } else {
+    calBtn.classList.add('active', 'border-blue-600', 'text-blue-600');
+    calBtn.classList.remove('border-transparent', 'text-gray-400');
+    matrixBtn.classList.remove('active', 'border-blue-600', 'text-blue-600');
+    matrixBtn.classList.add('border-transparent', 'text-gray-400');
+    renderCalendarPlanner();
+  }
+}
 
 function syncTogglesToQuadrant() {
   const urgentEl    = document.getElementById('toggle-urgent');
@@ -867,7 +1298,7 @@ function syncTogglesToQuadrant() {
 
 
 /* ============================================================
-   16. 앱 초기화
+   17. 앱 초기화
 ============================================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -889,6 +1320,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-logout').addEventListener('click', async () => {
     if (confirm('로그아웃 하시겠어요?')) await signOut();
   });
+
+  // ── 상단 메인 탭 전환 ──
+  document.getElementById('main-tab-matrix').addEventListener('click', () => switchMainTab('matrix'));
+  document.getElementById('main-tab-calendar').addEventListener('click', () => switchMainTab('calendar'));
 
   // ── 빠른 추가 ──
   document.getElementById('btn-add').addEventListener('click', addTask);
@@ -927,11 +1362,12 @@ document.addEventListener('DOMContentLoaded', () => {
     updateDashboard();
   });
 
-  // ── 상세 패널, 아카이브, 드래그앤드롭, 토글 ──
+  // ── 서브 컴포넌트 초기화 ──
   initDetailPanel();
   initArchiveToggle();
   initDragAndDrop();
+  initCalendarPlannerEvents();
   syncTogglesToQuadrant();
 
-  console.log('🎯 아이젠하워 매트릭스 v4 (스마트 코칭 & 원페이지) 시작!');
+  console.log('🎯 아이젠하워 플래너 v5 (드래그 앤 드롭 캘린더) 준비 완료!');
 });
