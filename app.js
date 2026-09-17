@@ -16,9 +16,9 @@
 const SUPABASE_URL      = 'https://xtuanrjjdzstqzoitesb.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dWFucmpqZHpzdHF6b2l0ZXNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MjEyMzgsImV4cCI6MjEwNTE5NzIzOH0.DVjT-eFQQOhMF2bFisdh-INm1EbWMH3-swQ1hKdsxvw';
 
-// Supabase 클라이언트 초기화
+// Supabase 클라이언트 초기화 (window.supabase와의 변수명 충돌 방지를 위해 supabaseClient 사용)
 const { createClient } = window.supabase;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Google OAuth 로그인 후 돌아올 주소 (GitHub Pages URL)
 const REDIRECT_URL = 'https://kwonsehan.github.io/eisenhower/';
@@ -156,7 +156,7 @@ function taskToDb(task) {
 
 /** Supabase에서 내 모든 할 일 불러오기 */
 async function fetchTasksFromDB() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('tasks')
     .select('*')
     .order('created_at', { ascending: true });
@@ -167,7 +167,7 @@ async function fetchTasksFromDB() {
 
 /** Supabase에 새 할 일 추가 */
 async function insertTaskToDB(task) {
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('tasks')
     .insert([taskToDb(task)]);
   if (error) throw error;
@@ -184,7 +184,7 @@ async function updateTaskInDB(taskId, fields) {
   if (fields.completed   !== undefined) dbFields.completed    = fields.completed;
   if (fields.completedAt !== undefined) dbFields.completed_at = fields.completedAt;
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('tasks')
     .update(dbFields)
     .eq('id', taskId);
@@ -193,7 +193,7 @@ async function updateTaskInDB(taskId, fields) {
 
 /** Supabase에서 할 일 삭제 */
 async function deleteTaskFromDB(taskId) {
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('tasks')
     .delete()
     .eq('id', taskId);
@@ -203,7 +203,7 @@ async function deleteTaskFromDB(taskId) {
 /** 여러 할 일을 한번에 upsert (Import 기능에 사용) */
 async function upsertTasksToDB(taskList) {
   const rows = taskList.map(taskToDb);
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from('tasks')
     .upsert(rows, { onConflict: 'id' });
   if (error) throw error;
@@ -216,7 +216,7 @@ async function upsertTasksToDB(taskList) {
 
 /** Google OAuth로 로그인 */
 async function signInWithGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: REDIRECT_URL,
@@ -229,7 +229,7 @@ async function signInWithGoogle() {
 
 /** 로그아웃 */
 async function signOut() {
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   // auth state change 이벤트가 자동으로 로그인 화면으로 전환함
 }
 
@@ -890,7 +890,7 @@ async function executeImport(mode) {
   } else {
     toUpsert = pendingImportData;
     // 기존 데이터 전체 삭제 후 교체
-    await supabase.from('tasks').delete().eq('user_id', currentUser.id);
+    await supabaseClient.from('tasks').delete().eq('user_id', currentUser.id);
     tasks = pendingImportData;
     showToast(`🔄 ${tasks.length}개 항목으로 덮어쓰기 완료.`);
   }
@@ -975,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── 인증 상태 감지 (로그인/로그아웃 자동 처리) ──
   // Supabase가 로그인 상태를 실시간으로 감지하고 이 함수를 호출합니다.
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (session && session.user) {
       // 로그인 상태
       currentUser = session.user;
