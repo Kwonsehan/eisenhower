@@ -1,5 +1,5 @@
 /* ============================================================
-   style.css - 아이젠하워 매트릭스 앱 (Supabase 연동 버전)
+   style.css - 아이젠하워 매트릭스 앱 (단일 화면 & 코칭 시스템)
 ============================================================ */
 
 * { box-sizing: border-box; }
@@ -53,11 +53,6 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 }
 
 
-/* ─── 메인 탭 ────────────────────────────────────────────── */
-.main-tab-btn { transition: color 0.2s, border-color 0.2s; }
-.main-tab-btn.active { border-bottom-color: #2563eb; color: #2563eb; }
-
-
 /* ─── 할 일 카드 ─────────────────────────────────────────── */
 .task-card {
   animation: fadeInSlide 0.25s ease-out;
@@ -76,22 +71,6 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 .task-card.dragging { opacity: 0.4; cursor: grabbing; transform: scale(1.02) rotate(1deg); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
 .task-card.completed { opacity: 0.65; background: #f9fafb; }
 .task-card.completed .task-title { text-decoration: line-through; color: #9ca3af; }
-
-/* 저장 중 표시 */
-.task-card.syncing::before {
-  content: '';
-  position: absolute;
-  top: 6px; right: 6px;
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #60a5fa;
-  animation: pulse 1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.8); }
-}
 
 @keyframes fadeInSlide {
   from { opacity: 0; transform: translateY(8px); }
@@ -141,63 +120,81 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 .move-dropdown button:disabled { color: #9ca3af; cursor: not-allowed; }
 
 
-/* ─── 대시보드 탭 ────────────────────────────────────────── */
+/* ─── 대시보드 탭 (일간/주간) ────────────────────────────── */
 .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
 
 
-/* ─── 히스토리 뷰 버튼 ───────────────────────────────────── */
-.history-view-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+/* ─── 💡 실시간 행동 코칭 카드 스타일 ─────────────────────── */
+.coaching-box {
+  transition: all 0.3s ease;
+}
+
+/* 1. 소방수 모드 (Q1+Q3 높음: 긴급 위주) */
+.coaching-theme-firefighter {
+  background: linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%);
+  border-color: #fca5a5 !important;
+}
+.coaching-theme-firefighter #coaching-badge {
+  background-color: #ef4444; color: white;
+}
+
+/* 2. 방패 모드 (Q3 높음: 타인의 부탁/잔업) */
+.coaching-theme-shield {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fcd34d !important;
+}
+.coaching-theme-shield #coaching-badge {
+  background-color: #d97706; color: white;
+}
+
+/* 3. 전략가 모드 (Q2 높음: 이상적 성장 상태) */
+.coaching-theme-strategist {
+  background: linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%);
+  border-color: #6ee7b7 !important;
+}
+.coaching-theme-strategist #coaching-badge {
+  background-color: #059669; color: white;
+}
+
+/* 4. 도피/방전 모드 (Q4 높음: 번아웃/낭비) */
+.coaching-theme-burnout {
+  background: linear-gradient(135deg, #faf5ff 0%, #f3f4f6 100%);
+  border-color: #d8b4fe !important;
+}
+.coaching-theme-burnout #coaching-badge {
+  background-color: #7c3aed; color: white;
+}
+
+/* 5. 스타트/기본 모드 */
+.coaching-theme-start {
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  border-color: #93c5fd !important;
+}
+.coaching-theme-start #coaching-badge {
+  background-color: #2563eb; color: white;
+}
 
 
-/* ─── 달력: 월 보기 ──────────────────────────────────────── */
-.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-.calendar-day-header { padding: 0.5rem 0; text-align: center; font-size: 0.75rem; font-weight: 600; color: #6b7280; background: #f9fafb; border-bottom: 1px solid #f3f4f6; }
-.calendar-day-header.sunday  { color: #ef4444; }
-.calendar-day-header.saturday { color: #3b82f6; }
-.calendar-cell { min-height: 72px; padding: 0.375rem; border-right: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background-color 0.1s; position: relative; }
-.calendar-cell:hover { background-color: #f0f9ff; }
-.calendar-cell.other-month { background-color: #fafafa; }
-.calendar-cell.other-month .calendar-date-num { color: #d1d5db; }
-.calendar-cell.today { background-color: #eff6ff; }
-.calendar-cell.today .calendar-date-num { background: #2563eb; color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.calendar-cell.selected { background-color: #dbeafe; }
-.calendar-cell.sunday  .calendar-date-num { color: #ef4444; }
-.calendar-cell.saturday .calendar-date-num { color: #3b82f6; }
-.calendar-date-num { font-size: 0.8125rem; font-weight: 500; color: #374151; margin-bottom: 3px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
-.calendar-dot-area { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 2px; }
-.calendar-task-badge { font-size: 0.6rem; padding: 0 4px; border-radius: 99px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
-.calendar-task-badge.q1 { background: #fee2e2; color: #b91c1c; }
-.calendar-task-badge.q2 { background: #dbeafe; color: #1d4ed8; }
-.calendar-task-badge.q3 { background: #fef9c3; color: #a16207; }
-.calendar-task-badge.q4 { background: #f3f4f6; color: #4b5563; }
-
-
-/* ─── 달력: 주 보기 ──────────────────────────────────────── */
-.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-.week-day-col { border-right: 1px solid #f3f4f6; min-height: 200px; }
-.week-day-col:last-child { border-right: none; }
-.week-day-header { padding: 0.625rem 0.5rem; text-align: center; border-bottom: 1px solid #f3f4f6; background: #f9fafb; }
-.week-day-header .week-day-name { font-size: 0.7rem; color: #6b7280; font-weight: 600; }
-.week-day-header .week-day-num { font-size: 1rem; font-weight: 700; color: #374151; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; margin: 2px auto 0; }
-.week-day-header.today .week-day-num { background: #2563eb; color: white; }
-.week-day-header.sunday .week-day-name, .week-day-header.sunday .week-day-num { color: #ef4444; }
-.week-day-header.saturday .week-day-name, .week-day-header.saturday .week-day-num { color: #3b82f6; }
-.week-day-header.today.sunday .week-day-num, .week-day-header.today.saturday .week-day-num { color: white; }
-.week-task-item { margin: 4px; padding: 3px 6px; border-radius: 5px; font-size: 0.7rem; font-weight: 500; line-height: 1.4; cursor: pointer; transition: opacity 0.1s; word-break: break-all; }
-.week-task-item:hover { opacity: 0.8; }
-.week-task-item.q1 { background: #fee2e2; color: #b91c1c; }
-.week-task-item.q2 { background: #dbeafe; color: #1d4ed8; }
-.week-task-item.q3 { background: #fef9c3; color: #a16207; }
-.week-task-item.q4 { background: #f3f4f6; color: #4b5563; }
-.week-empty { padding: 16px 8px; text-align: center; color: #e5e7eb; font-size: 0.7rem; }
-
-
-/* ─── 히스토리 날짜별 목록 ───────────────────────────────── */
-.history-task-card { padding: 0.625rem 0.875rem; border-radius: 0.625rem; border-left: 3px solid; background: #fafafa; font-size: 0.875rem; }
-.history-task-card.q1 { border-color: #ef4444; }
-.history-task-card.q2 { border-color: #3b82f6; }
-.history-task-card.q3 { border-color: #eab308; }
-.history-task-card.q4 { border-color: #9ca3af; }
+/* ─── 📦 지난 완료 기록 아카이브 스타일 ──────────────────── */
+.archive-item-card {
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.625rem;
+  border-left: 3.5px solid;
+  background: white;
+  border-top: 1px solid #f3f4f6;
+  border-right: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f3f4f6;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.archive-item-card:hover {
+  transform: translateX(3px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.archive-item-card.q1 { border-left-color: #ef4444; }
+.archive-item-card.q2 { border-left-color: #3b82f6; }
+.archive-item-card.q3 { border-left-color: #eab308; }
+.archive-item-card.q4 { border-left-color: #9ca3af; }
 
 
 /* ─── 슬라이드 패널 ──────────────────────────────────────── */
@@ -226,5 +223,4 @@ input[type="checkbox"].task-check { width: 1.125rem; height: 1.125rem; cursor: p
 /* ─── 반응형 ─────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .detail-panel { max-width: 100%; }
-  .calendar-cell { min-height: 52px; }
 }
