@@ -126,6 +126,7 @@ function dbToTask(row) {
     dueDate:       row.due_date       || null, // 마감일 (데드라인)
     scheduledDate: row.scheduled_date || null, // 실행 예정일 (캘린더 배정 날짜)
     memo:          row.memo           || '',
+    subtasks:      Array.isArray(row.subtasks) ? row.subtasks : [], // 미니 체크리스트 세부 단계
     completed:     row.completed,
     completedAt:   row.completed_at   || null,
     createdAt:     row.created_at,
@@ -140,6 +141,7 @@ function taskToDb(task) {
     quadrant:     task.quadrant,
     due_date:     task.dueDate     || null,
     memo:         task.memo        || '',
+    subtasks:     task.subtasks    || [], // 미니 체크리스트 JSON 배열
     completed:    task.completed,
     completed_at: task.completedAt || null,
     created_at:   task.createdAt,
@@ -179,6 +181,7 @@ async function updateTaskInDB(taskId, fields) {
   if (fields.dueDate       !== undefined) dbFields.due_date       = fields.dueDate;
   if (fields.scheduledDate !== undefined) dbFields.scheduled_date = fields.scheduledDate;
   if (fields.memo          !== undefined) dbFields.memo           = fields.memo;
+  if (fields.subtasks      !== undefined) dbFields.subtasks       = fields.subtasks;
   if (fields.completed     !== undefined) dbFields.completed      = fields.completed;
   if (fields.completedAt   !== undefined) dbFields.completed_at   = fields.completedAt;
 
@@ -287,6 +290,15 @@ function createTaskCard(task) {
   const scheduledHtml = task.scheduledDate
     ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium ml-1">🗓️ ${task.scheduledDate}</span>` : '';
 
+  // 미니 체크리스트 진행률 뱃지 (하위 단계가 있을 때만 표시)
+  let subtaskBadgeHtml = '';
+  if (task.subtasks && task.subtasks.length > 0) {
+    const totalSub = task.subtasks.length;
+    const doneSub = task.subtasks.filter((s) => s.completed).length;
+    const isAllDone = doneSub === totalSub;
+    subtaskBadgeHtml = `<span class="task-subtask-badge ${isAllDone ? 'all-done' : ''}" title="세부 단계: ${doneSub}/${totalSub} 완료">☑️ ${doneSub}/${totalSub}</span>`;
+  }
+
   const completedHtml = task.completed && task.completedAt
     ? `<p class="text-xs text-gray-400 mt-1">✅ ${formatCompletedAt(task.completedAt)} 완료</p>` : '';
 
@@ -298,6 +310,7 @@ function createTaskCard(task) {
         <div class="mt-1 flex flex-wrap gap-1 items-center">
           ${dueBadgeHtml}
           ${scheduledHtml}
+          ${subtaskBadgeHtml}
         </div>
         ${completedHtml}
       </div>
@@ -358,6 +371,7 @@ async function addTask() {
     dueDate:       document.getElementById('input-due').value || null,
     scheduledDate: null,
     memo:          '',
+    subtasks:      [], // 미니 체크리스트 초기값
     completed:     false,
     completedAt:   null,
     createdAt:     new Date().toISOString(),
@@ -802,13 +816,16 @@ function renderCalendarDrawer() {
     block.dataset.id = task.id;
     block.draggable  = true;
 
-    const dueBadgeType = getDueBadgeType(task.dueDate);
     const dueHtml = task.dueDate
       ? `<span class="due-badge ${dueBadgeType} text-[10px]">${formatDueDate(task.dueDate)}</span>` : '';
     
     const schedHtml = task.scheduledDate
       ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">🗓️ 배정됨: ${task.scheduledDate.slice(5)}</span>`
       : `<span class="text-[10px] text-gray-400">미배정</span>`;
+
+    const subtaskBadge = (task.subtasks && task.subtasks.length > 0)
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">☑️ ${task.subtasks.filter((s) => s.completed).length}/${task.subtasks.length}</span>`
+      : '';
 
     block.innerHTML = `
       <div class="flex items-start justify-between gap-1">
@@ -817,6 +834,7 @@ function renderCalendarDrawer() {
           <div class="mt-1 flex flex-wrap gap-1 items-center">
             ${dueHtml}
             ${schedHtml}
+            ${subtaskBadge}
           </div>
         </div>
         <span class="text-gray-300 text-xs select-none">⠿</span>
@@ -1006,10 +1024,15 @@ function createCalendarChip(task) {
     ? `<span class="text-[9px] bg-orange-500 text-white px-1 rounded font-bold">오늘마감</span>`
     : '';
 
+  const subtaskTagHtml = (task.subtasks && task.subtasks.length > 0)
+    ? `<span class="text-[9px] text-gray-500 font-medium">☑️${task.subtasks.filter((s) => s.completed).length}/${task.subtasks.length}</span>`
+    : '';
+
   chip.innerHTML = `
     <input type="checkbox" class="task-check mr-1" ${task.completed ? 'checked' : ''} title="완료 처리" />
     <span class="chip-title">${escapeHtml(task.title)}</span>
     ${dueTagHtml}
+    ${subtaskTagHtml}
   `;
 
   // 칩 내부 체크박스
@@ -1160,6 +1183,88 @@ function setCalViewBtn(mode) {
    13. 상세 편집 슬라이드 패널
 ============================================================ */
 
+let currentEditingSubtasks = [];
+
+function renderDetailSubtasks() {
+  const listEl     = document.getElementById('detail-subtasks-list');
+  const progressEl = document.getElementById('detail-subtask-progress');
+  const barBgEl    = document.getElementById('detail-subtask-bar-bg');
+  const barFillEl  = document.getElementById('detail-subtask-bar-fill');
+  if (!listEl) return;
+
+  listEl.innerHTML = '';
+  const total = currentEditingSubtasks.length;
+
+  if (total === 0) {
+    if (progressEl) progressEl.classList.add('hidden');
+    if (barBgEl)    barBgEl.classList.add('hidden');
+    listEl.innerHTML = '<p class="text-xs text-gray-400 py-1">등록된 세부 단계가 없습니다. 아래 입력창에서 추가해보세요.</p>';
+    return;
+  }
+
+  const completedCount = currentEditingSubtasks.filter((s) => s.completed).length;
+  const pct = Math.round((completedCount / total) * 100);
+
+  if (progressEl) {
+    progressEl.textContent = `${completedCount}/${total} (${pct}%)`;
+    progressEl.classList.remove('hidden');
+    if (completedCount === total) {
+      progressEl.className = 'text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full';
+    } else {
+      progressEl.className = 'text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full';
+    }
+  }
+
+  if (barBgEl && barFillEl) {
+    barBgEl.classList.remove('hidden');
+    barFillEl.style.width = `${pct}%`;
+    barFillEl.className = `h-1.5 rounded-full transition-all duration-300 ${completedCount === total ? 'bg-green-500' : 'bg-blue-600'}`;
+  }
+
+  currentEditingSubtasks.forEach((subtask) => {
+    const itemEl = document.createElement('div');
+    itemEl.className = `subtask-item ${subtask.completed ? 'completed' : ''}`;
+    itemEl.innerHTML = `
+      <div class="flex items-center gap-2 min-w-0 flex-1">
+        <input type="checkbox" class="subtask-checkbox cursor-pointer" ${subtask.completed ? 'checked' : ''} />
+        <span class="text-xs text-gray-700 break-words leading-tight">${escapeHtml(subtask.text)}</span>
+      </div>
+      <button type="button" class="btn-del-subtask text-gray-400 hover:text-red-500 text-xs px-1 transition-colors" title="단계 삭제">✕</button>
+    `;
+
+    // 체크박스 토글
+    itemEl.querySelector('.subtask-checkbox').addEventListener('change', (e) => {
+      subtask.completed = e.target.checked;
+      renderDetailSubtasks();
+    });
+
+    // 단계 삭제 버튼
+    itemEl.querySelector('.btn-del-subtask').addEventListener('click', () => {
+      currentEditingSubtasks = currentEditingSubtasks.filter((s) => s.id !== subtask.id);
+      renderDetailSubtasks();
+    });
+
+    listEl.appendChild(itemEl);
+  });
+}
+
+function addSubtaskFromInput() {
+  const inputEl = document.getElementById('detail-subtask-input');
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  currentEditingSubtasks.push({
+    id: generateId(),
+    text,
+    completed: false,
+  });
+
+  inputEl.value = '';
+  renderDetailSubtasks();
+  inputEl.focus();
+}
+
 function openDetailPanel(taskId) {
   const task = tasks.find((t) => t.id === taskId);
   if (!task) return;
@@ -1170,6 +1275,14 @@ function openDetailPanel(taskId) {
   document.getElementById('detail-due').value       = task.dueDate || '';
   document.getElementById('detail-scheduled').value = task.scheduledDate || '';
   document.getElementById('detail-memo').value      = task.memo || '';
+
+  // 서브태스크 복제 및 렌더링
+  currentEditingSubtasks = Array.isArray(task.subtasks)
+    ? JSON.parse(JSON.stringify(task.subtasks))
+    : [];
+  renderDetailSubtasks();
+  const subtaskInput = document.getElementById('detail-subtask-input');
+  if (subtaskInput) subtaskInput.value = '';
 
   const badge = document.getElementById('detail-quadrant-badge');
   badge.textContent = QUADRANT_INFO[task.quadrant].label;
@@ -1192,6 +1305,7 @@ function closeDetailPanel() {
   document.getElementById('detail-panel').classList.remove('open');
   document.getElementById('detail-overlay').classList.remove('active');
   openPanelTaskId = null;
+  currentEditingSubtasks = [];
 }
 
 async function saveDetailPanel() {
@@ -1204,6 +1318,7 @@ async function saveDetailPanel() {
     quadrant:      document.getElementById('detail-quadrant').value,
     dueDate:       document.getElementById('detail-due').value || null,
     scheduledDate: document.getElementById('detail-scheduled').value || null,
+    subtasks:      currentEditingSubtasks, // 세부 체크리스트 저장
     memo:          document.getElementById('detail-memo').value.trim(),
   });
 
@@ -1217,6 +1332,20 @@ function initDetailPanel() {
   document.getElementById('detail-btn-save').addEventListener('click', saveDetailPanel);
   document.getElementById('detail-btn-delete').addEventListener('click', () => { if (openPanelTaskId) deleteTask(openPanelTaskId); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openPanelTaskId) closeDetailPanel(); });
+
+  // 세부 단계 추가 이벤트 바인딩
+  const addSubtaskBtn = document.getElementById('detail-subtask-add-btn');
+  if (addSubtaskBtn) addSubtaskBtn.addEventListener('click', addSubtaskFromInput);
+
+  const subtaskInput = document.getElementById('detail-subtask-input');
+  if (subtaskInput) {
+    subtaskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addSubtaskFromInput();
+      }
+    });
+  }
 }
 
 

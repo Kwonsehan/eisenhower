@@ -349,3 +349,40 @@ input[type="checkbox"].task-check { width: 1.125rem; height: 1.125rem; cursor: p
 button, select, input {
   touch-action: manipulation;
 }
+
+/* ─── 세부 실행 단계 (미니 체크리스트) 스타일 ─── */
+.subtask-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  background-color: #f9fafb;
+  border: 1px solid #f3f4f6;
+  transition: all 0.15s ease;
+}
+.subtask-item:hover {
+  background-color: #f3f4f6;
+}
+.subtask-item.completed span {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+.task-subtask-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.task-subtask-badge.all-done {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border-color: #dcfce7;
+}
+
