@@ -1057,7 +1057,29 @@ function bindDropEventsToCell(cellEl, targetDateStr) {
   });
 }
 
-/** 캘린더 플래너 UI 이벤트 초기화 */
+function prevCalendarPeriod() {
+  if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() - 1);
+  else calBaseDate.setDate(calBaseDate.getDate() - 7);
+  renderCalendarPlanner();
+  triggerSwipeAnimation('cal-swipe-right');
+}
+
+function nextCalendarPeriod() {
+  if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() + 1);
+  else calBaseDate.setDate(calBaseDate.getDate() + 7);
+  renderCalendarPlanner();
+  triggerSwipeAnimation('cal-swipe-left');
+}
+
+function triggerSwipeAnimation(animClass) {
+  const gridArea = document.getElementById('cal-grid-area');
+  if (!gridArea) return;
+  gridArea.classList.remove('cal-swipe-left', 'cal-swipe-right');
+  void gridArea.offsetWidth; // 리플로우 트리거
+  gridArea.classList.add(animClass);
+}
+
+/** 캘린더 플래너 UI 이벤트 초기화 (모바일 스와이프 포함) */
 function initCalendarPlannerEvents() {
   // 월간/주간 전환
   document.getElementById('cal-view-month').addEventListener('click', () => {
@@ -1071,21 +1093,42 @@ function initCalendarPlannerEvents() {
     renderCalendarPlanner();
   });
 
-  // 네비게이션
-  document.getElementById('cal-prev').addEventListener('click', () => {
-    if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() - 1);
-    else calBaseDate.setDate(calBaseDate.getDate() - 7);
-    renderCalendarPlanner();
-  });
-  document.getElementById('cal-next').addEventListener('click', () => {
-    if (calViewMode === 'month') calBaseDate.setMonth(calBaseDate.getMonth() + 1);
-    else calBaseDate.setDate(calBaseDate.getDate() + 7);
-    renderCalendarPlanner();
-  });
+  // 네비게이션 버튼 (클릭 시 애니메이션 포함)
+  document.getElementById('cal-prev').addEventListener('click', prevCalendarPeriod);
+  document.getElementById('cal-next').addEventListener('click', nextCalendarPeriod);
   document.getElementById('cal-today').addEventListener('click', () => {
     calBaseDate = new Date();
     renderCalendarPlanner();
   });
+
+  // ── [모바일 터치 스와이프 제스처] ──
+  // 손가락으로 왼쪽/오른쪽으로 밀면 이전/다음 달(주)로 부드럽게 이동
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const gridArea = document.getElementById('cal-grid-area');
+
+  gridArea.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  gridArea.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const diffX = touchEndX - touchStartX;
+    const diffY = touchEndY - touchStartY;
+
+    // 수평 이동 거리가 40px 이상이고, 수직 이동보다 명확히 클 때만 스와이프 인정
+    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY) * 1.3) {
+      if (diffX < 0) {
+        // 왼쪽으로 밀기 (손가락 ←) : 다음 달/주로 이동
+        nextCalendarPeriod();
+      } else {
+        // 오른쪽으로 밀기 (손가락 →) : 이전 달/주로 이동
+        prevCalendarPeriod();
+      }
+    }
+  }, { passive: true });
 
   // 서랍 사분면 필터 버튼
   document.querySelectorAll('.drawer-filter-btn').forEach((btn) => {

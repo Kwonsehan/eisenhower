@@ -323,3 +323,20 @@ input[type="checkbox"].task-check { width: 1.125rem; height: 1.125rem; cursor: p
   .cal-week-col { min-height: 240px; }
   .drawer-task-block { padding: 0.5rem; }
 }
+
+/* ─── 캘린더 터치 스와이프 애니메이션 ─── */
+.cal-swipe-left { animation: slideFromRight 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.cal-swipe-right { animation: slideFromLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes slideFromRight {
+  from { opacity: 0.4; transform: translateX(25px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideFromLeft {
+  from { opacity: 0.4; transform: translateX(-25px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+button, select, input {
+  touch-action: manipulation;
+}
