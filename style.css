@@ -386,3 +386,18 @@ button, select, input {
   border-color: #dcfce7;
 }
 
+/* ─── Q2 마감일 임박 스마트 승격 (Smart Escalation) 스타일 ─── */
+.task-card.q2-imminent {
+  border-left: 4px solid #ef4444 !important;
+  background-color: #fffaf0 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.12);
+}
+.q2-imminent-banner {
+  animation: fadeInDown 0.3s ease-out;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+

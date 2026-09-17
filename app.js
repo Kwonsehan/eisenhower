@@ -113,6 +113,14 @@ function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+/** Q2 항목 중 마감이 지났거나 오늘/내일인 임박 항목인지 판별 */
+function isQ2Imminent(task) {
+  if (!task || task.quadrant !== 'Q2' || task.completed || !task.dueDate) return false;
+  const badgeType = getDueBadgeType(task.dueDate);
+  return badgeType === 'overdue' || badgeType === 'today' || badgeType === 'tomorrow';
+}
+
+
 
 /* ============================================================
    4. DB ↔ 앱 데이터 매핑 (scheduled_date 포함)
@@ -278,7 +286,9 @@ async function loadAndRender() {
 function createTaskCard(task) {
   const card = document.createElement('div');
   const hasMemo = task.memo && task.memo.trim().length > 0;
-  card.className = `task-card ${task.completed ? 'completed' : ''} ${hasMemo ? 'has-memo' : ''}`;
+  const isImminent = isQ2Imminent(task);
+
+  card.className = `task-card ${task.completed ? 'completed' : ''} ${hasMemo ? 'has-memo' : ''} ${isImminent ? 'q2-imminent' : ''}`;
   card.dataset.id = task.id;
   card.draggable = true;
 
@@ -299,6 +309,13 @@ function createTaskCard(task) {
     subtaskBadgeHtml = `<span class="task-subtask-badge ${isAllDone ? 'all-done' : ''}" title="세부 단계: ${doneSub}/${totalSub} 완료">☑️ ${doneSub}/${totalSub}</span>`;
   }
 
+  // Q2 마감 임박 뱃지 & 빠른 승격 버튼
+  const imminentBadgeHtml = isImminent
+    ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold border border-red-200 animate-pulse">🚨 마감 임박</span>` : '';
+
+  const escalateBtnHtml = isImminent
+    ? `<button class="btn-escalate-quick text-[11px] font-bold px-2 py-0.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all whitespace-nowrap shadow-xs" title="Q1(긴급·중요)으로 즉시 승격">🔥 Q1 승격</button>` : '';
+
   const completedHtml = task.completed && task.completedAt
     ? `<p class="text-xs text-gray-400 mt-1">✅ ${formatCompletedAt(task.completedAt)} 완료</p>` : '';
 
@@ -308,6 +325,7 @@ function createTaskCard(task) {
       <div class="flex-1 min-w-0 cursor-pointer" data-open-panel>
         <p class="task-title text-sm font-medium text-gray-800 leading-snug break-words">${escapeHtml(task.title)}</p>
         <div class="mt-1 flex flex-wrap gap-1 items-center">
+          ${imminentBadgeHtml}
           ${dueBadgeHtml}
           ${scheduledHtml}
           ${subtaskBadgeHtml}
@@ -315,12 +333,29 @@ function createTaskCard(task) {
         ${completedHtml}
       </div>
       <div class="flex items-center gap-1 flex-shrink-0 relative">
+        ${escalateBtnHtml}
         <button class="btn-move text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50 transition-colors text-xs" title="이동">↔️</button>
         <button class="btn-delete text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors text-xs" title="삭제">🗑️</button>
       </div>
     </div>
   `;
   return card;
+}
+
+/** Q2 마감 임박 작업들을 Q1으로 일괄 승격 */
+async function escalateAllImminentToQ1(imminentList) {
+  if (!imminentList || imminentList.length === 0) return;
+  const count = imminentList.length;
+  imminentList.forEach((t) => { t.quadrant = 'Q1'; });
+  renderAll();
+
+  try {
+    await upsertTasksToDB(imminentList);
+    showToast(`🔥 ${count}개 작업이 Q1(긴급·중요)으로 승격되었습니다!`);
+  } catch (e) {
+    await loadAndRender();
+    showToast('⚠️ 승격 처리 중 오류 발생.', 'error');
+  }
 }
 
 function renderAll() {
@@ -330,8 +365,28 @@ function renderAll() {
     listEl.innerHTML = '';
     const qTasks = tasks.filter((t) => t.quadrant === q);
 
+    // Q2 마감 임박 알림 스마트 배너
+    if (q === 'Q2') {
+      const imminentTasks = qTasks.filter(isQ2Imminent);
+      if (imminentTasks.length > 0) {
+        const banner = document.createElement('div');
+        banner.className = 'q2-imminent-banner p-2 mb-2 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-between gap-2 shadow-xs';
+        banner.innerHTML = `
+          <div class="flex items-center gap-1.5 text-xs text-orange-800 font-semibold">
+            <span>🚨</span>
+            <span>마감 임박 <strong>${imminentTasks.length}건</strong></span>
+          </div>
+          <button class="btn-escalate-all text-[11px] font-bold px-2 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white transition-all shadow-sm active:scale-95 whitespace-nowrap">
+            🔥 모두 Q1 승격
+          </button>
+        `;
+        banner.querySelector('.btn-escalate-all').addEventListener('click', () => escalateAllImminentToQ1(imminentTasks));
+        listEl.appendChild(banner);
+      }
+    }
+
     if (qTasks.length === 0) {
-      listEl.innerHTML = `<div class="empty-hint">할 일을 추가하거나<br>드래그해서 놓으세요</div>`;
+      listEl.innerHTML += `<div class="empty-hint">할 일을 추가하거나<br>드래그해서 놓으세요</div>`;
     } else {
       qTasks.forEach((task) => {
         const card = createTaskCard(task);
@@ -487,6 +542,16 @@ function bindCardEvents(card, task) {
   card.querySelector('.btn-delete').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
   card.querySelector('.btn-move').addEventListener('click', (e) => { e.stopPropagation(); toggleMoveDropdown(card, task); });
   card.querySelector('[data-open-panel]').addEventListener('click', (e) => { e.stopPropagation(); openDetailPanel(task.id); });
+
+  // Q2 마감 임박 카드인 경우: 빠른 Q1 승격 버튼 리스너
+  const escalateBtn = card.querySelector('.btn-escalate-quick');
+  if (escalateBtn) {
+    escalateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moveTask(task.id, 'Q1');
+      showToast(`🔥 "${task.title}" 작업이 Q1(긴급·중요)으로 승격되었습니다!`);
+    });
+  }
 
   card.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData('text/plain', task.id);
