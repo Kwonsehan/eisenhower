@@ -6,19 +6,12 @@
   <title>아이젠하워 매트릭스 - 할 일 관리</title>
 
   <!-- ── PWA 설정 ── -->
-  <!-- manifest.json: 홈화면 추가 시 앱 이름·아이콘·색상 정의 -->
   <link rel="manifest" href="./manifest.json" />
-
-  <!-- 모바일 브라우저 상단 테마 색상 (파란색) -->
   <meta name="theme-color" content="#2563eb" />
-
-  <!-- iOS Safari 홈화면 추가 지원 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="매트릭스" />
   <link rel="apple-touch-icon" href="./icon-192.png" />
-
-  <!-- 일반 파비콘 -->
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
 
   <!-- Google Fonts: Noto Sans KR -->
@@ -31,6 +24,9 @@
 
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Supabase JS SDK (인증 + DB 연동) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Tailwind 커스텀 폰트 설정 -->
   <script>
@@ -49,359 +45,337 @@
 <body class="bg-gray-100 min-h-screen font-sans">
 
   <!-- ============================================================
-       헤더
+       로그인 화면 (비로그인 상태에서 전체 화면으로 표시)
   ============================================================ -->
-  <header class="bg-white shadow-sm sticky top-0 z-40">
-    <div class="max-w-screen-xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <span class="text-2xl">🎯</span>
-        <h1 class="text-xl font-bold text-gray-800">아이젠하워 매트릭스</h1>
-        <span class="text-xs text-gray-400 hidden sm:block">우선순위 기반 할 일 관리</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <button id="btn-export" class="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-300 rounded-lg hover:bg-green-100 transition-colors" title="JSON으로 내보내기">
-          <span>📤</span><span class="hidden sm:inline">내보내기</span>
-        </button>
-        <button id="btn-import" class="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-100 transition-colors" title="JSON에서 가져오기">
-          <span>📥</span><span class="hidden sm:inline">가져오기</span>
-        </button>
-        <input type="file" id="import-file-input" accept=".json" class="hidden" />
-      </div>
-    </div>
+  <div id="login-screen" class="login-screen fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-xs w-full text-center">
 
-    <!-- ── 메인 탭 네비게이션 (매트릭스 | 히스토리) ── -->
-    <div class="max-w-screen-xl mx-auto px-4 pb-0 flex gap-0 border-t border-gray-100">
-      <button id="main-tab-matrix"
-        class="main-tab-btn active px-5 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 transition-all">
-        📋 매트릭스
+      <!-- 앱 아이콘 & 이름 -->
+      <div class="text-6xl mb-3">🎯</div>
+      <h1 class="text-2xl font-bold text-gray-800 mb-1">아이젠하워 매트릭스</h1>
+      <p class="text-sm text-gray-400 mb-8">어디서든 내 할 일을 관리하세요</p>
+
+      <!-- Google 로그인 버튼 -->
+      <button
+        id="btn-google-login"
+        class="google-login-btn w-full flex items-center justify-center gap-3 px-5 py-3 bg-white border-2 border-gray-200 rounded-2xl text-gray-700 font-semibold text-sm hover:border-blue-300 hover:shadow-md active:scale-95 transition-all"
+      >
+        <!-- Google 로고 SVG -->
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Google로 로그인
       </button>
-      <button id="main-tab-history"
-        class="main-tab-btn px-5 py-2.5 text-sm font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition-all">
-        📅 히스토리
-      </button>
+
+      <p class="text-xs text-gray-400 mt-5 leading-relaxed">
+        로그인하면 휴대폰과 노트북이<br/>자동으로 연동됩니다 ☁️
+      </p>
     </div>
-  </header>
+  </div>
 
 
   <!-- ============================================================
-       메인 컨텐츠
+       로딩 화면 (데이터 불러오는 중)
   ============================================================ -->
-  <main class="max-w-screen-xl mx-auto px-4 py-5">
+  <div id="loading-screen" class="hidden fixed inset-0 bg-white/80 z-[90] flex flex-col items-center justify-center gap-3">
+    <div class="loading-spinner"></div>
+    <p class="text-sm text-gray-500 font-medium">불러오는 중...</p>
+  </div>
 
-    <!-- ══════════════════════════════════════════════════════════
-         [탭 1] 매트릭스 뷰
-    ══════════════════════════════════════════════════════════ -->
-    <div id="view-matrix">
 
-      <!-- 빠른 추가 입력창 -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-5">
-        <h2 class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">⚡ 빠른 추가</h2>
-        <div class="flex flex-wrap gap-2 items-end">
-          <div class="flex-1 min-w-[180px]">
-            <label class="text-xs text-gray-500 mb-1 block">할 일 제목 *</label>
-            <input type="text" id="input-title" placeholder="할 일을 입력하세요..."
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
-          </div>
-          <div class="w-36">
-            <label class="text-xs text-gray-500 mb-1 block">사분면</label>
-            <select id="input-quadrant"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
-              <option value="Q1">Q1 🔴 긴급+중요</option>
-              <option value="Q2">Q2 🔵 중요+여유</option>
-              <option value="Q3">Q3 🟡 긴급+덜중요</option>
-              <option value="Q4">Q4 ⚪ 제거 대상</option>
-            </select>
-          </div>
-          <div class="flex gap-3 items-center py-2">
-            <label class="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" id="toggle-urgent" class="w-4 h-4 accent-orange-500" />
-              <span class="text-sm text-gray-600">긴급</span>
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" id="toggle-important" class="w-4 h-4 accent-blue-500" />
-              <span class="text-sm text-gray-600">중요</span>
-            </label>
-          </div>
-          <div class="w-36">
-            <label class="text-xs text-gray-500 mb-1 block">마감일 (선택)</label>
-            <input type="date" id="input-due"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-          </div>
-          <button id="btn-add"
-            class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-sm">
-            + 추가
+  <!-- ============================================================
+       앱 본체 (로그인 후 표시)
+  ============================================================ -->
+  <div id="app-body" class="hidden">
+
+    <!-- 헤더 -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+      <div class="max-w-screen-xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🎯</span>
+          <h1 class="text-xl font-bold text-gray-800">아이젠하워 매트릭스</h1>
+          <span class="text-xs text-gray-400 hidden sm:block">우선순위 기반 할 일 관리</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Export 버튼 -->
+          <button id="btn-export" class="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-300 rounded-lg hover:bg-green-100 transition-colors" title="JSON으로 내보내기">
+            <span>📤</span><span class="hidden sm:inline">내보내기</span>
           </button>
+          <!-- Import 버튼 -->
+          <button id="btn-import" class="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-100 transition-colors" title="JSON에서 가져오기">
+            <span>📥</span><span class="hidden sm:inline">가져오기</span>
+          </button>
+          <input type="file" id="import-file-input" accept=".json" class="hidden" />
+
+          <!-- 사용자 아바타 + 로그아웃 -->
+          <div class="flex items-center gap-2 ml-1 pl-2 border-l border-gray-200">
+            <img id="user-avatar" src="" alt="프로필" class="w-7 h-7 rounded-full hidden object-cover" />
+            <span id="user-name" class="text-xs text-gray-600 hidden sm:block max-w-[80px] truncate"></span>
+            <button id="btn-logout" class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-1 rounded hover:bg-red-50" title="로그아웃">
+              로그아웃
+            </button>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <!-- 2×2 매트릭스 그리드 -->
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+      <!-- 메인 탭 네비게이션 -->
+      <div class="max-w-screen-xl mx-auto px-4 pb-0 flex gap-0 border-t border-gray-100">
+        <button id="main-tab-matrix" class="main-tab-btn active px-5 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 transition-all">
+          📋 매트릭스
+        </button>
+        <button id="main-tab-history" class="main-tab-btn px-5 py-2.5 text-sm font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition-all">
+          📅 히스토리
+        </button>
+      </div>
+    </header>
 
-        <!-- Q1: 긴급 + 중요 -->
-        <div id="quadrant-Q1" class="quadrant-panel bg-red-50 border-2 border-red-300 rounded-2xl shadow-sm" data-quadrant="Q1">
-          <div class="quadrant-header bg-red-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
-            <div><span class="text-lg font-bold">Q1</span><span class="ml-2 text-sm opacity-90">긴급 + 중요</span></div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs bg-red-700 px-2 py-0.5 rounded-full">🔥 Do First</span>
-              <span id="count-Q1" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+
+    <!-- 메인 컨텐츠 -->
+    <main class="max-w-screen-xl mx-auto px-4 py-5">
+
+      <!-- ══ [탭 1] 매트릭스 뷰 ══ -->
+      <div id="view-matrix">
+
+        <!-- 빠른 추가 -->
+        <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-5">
+          <h2 class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">⚡ 빠른 추가</h2>
+          <div class="flex flex-wrap gap-2 items-end">
+            <div class="flex-1 min-w-[180px]">
+              <label class="text-xs text-gray-500 mb-1 block">할 일 제목 *</label>
+              <input type="text" id="input-title" placeholder="할 일을 입력하세요..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
+            </div>
+            <div class="w-36">
+              <label class="text-xs text-gray-500 mb-1 block">사분면</label>
+              <select id="input-quadrant" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                <option value="Q1">Q1 🔴 긴급+중요</option>
+                <option value="Q2">Q2 🔵 중요+여유</option>
+                <option value="Q3">Q3 🟡 긴급+덜중요</option>
+                <option value="Q4">Q4 ⚪ 제거 대상</option>
+              </select>
+            </div>
+            <div class="flex gap-3 items-center py-2">
+              <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                <input type="checkbox" id="toggle-urgent" class="w-4 h-4 accent-orange-500" />
+                <span class="text-sm text-gray-600">긴급</span>
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                <input type="checkbox" id="toggle-important" class="w-4 h-4 accent-blue-500" />
+                <span class="text-sm text-gray-600">중요</span>
+              </label>
+            </div>
+            <div class="w-36">
+              <label class="text-xs text-gray-500 mb-1 block">마감일 (선택)</label>
+              <input type="date" id="input-due" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            </div>
+            <button id="btn-add" class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-sm">
+              + 추가
+            </button>
+          </div>
+        </section>
+
+        <!-- 2×2 매트릭스 -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+
+          <div id="quadrant-Q1" class="quadrant-panel bg-red-50 border-2 border-red-300 rounded-2xl shadow-sm" data-quadrant="Q1">
+            <div class="quadrant-header bg-red-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
+              <div><span class="text-lg font-bold">Q1</span><span class="ml-2 text-sm opacity-90">긴급 + 중요</span></div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs bg-red-700 px-2 py-0.5 rounded-full">🔥 Do First</span>
+                <span id="count-Q1" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+              </div>
+            </div>
+            <div id="list-Q1" class="task-list p-3 min-h-[120px] space-y-2"></div>
+            <div class="drop-hint hidden text-center text-red-300 text-sm pb-3">여기에 놓으세요</div>
+          </div>
+
+          <div id="quadrant-Q2" class="quadrant-panel bg-blue-50 border-2 border-blue-300 rounded-2xl shadow-sm" data-quadrant="Q2">
+            <div class="quadrant-header bg-blue-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
+              <div><span class="text-lg font-bold">Q2</span><span class="ml-2 text-sm opacity-90">중요 + 여유</span></div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs bg-blue-700 px-2 py-0.5 rounded-full">📅 Schedule</span>
+                <span id="count-Q2" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+              </div>
+            </div>
+            <div id="list-Q2" class="task-list p-3 min-h-[120px] space-y-2"></div>
+            <div class="drop-hint hidden text-center text-blue-300 text-sm pb-3">여기에 놓으세요</div>
+          </div>
+
+          <div id="quadrant-Q3" class="quadrant-panel bg-yellow-50 border-2 border-yellow-300 rounded-2xl shadow-sm" data-quadrant="Q3">
+            <div class="quadrant-header bg-yellow-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
+              <div><span class="text-lg font-bold">Q3</span><span class="ml-2 text-sm opacity-90">긴급 + 덜 중요</span></div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs bg-yellow-700 px-2 py-0.5 rounded-full">🤝 Delegate</span>
+                <span id="count-Q3" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+              </div>
+            </div>
+            <div id="list-Q3" class="task-list p-3 min-h-[120px] space-y-2"></div>
+            <div class="drop-hint hidden text-center text-yellow-400 text-sm pb-3">여기에 놓으세요</div>
+          </div>
+
+          <div id="quadrant-Q4" class="quadrant-panel bg-gray-50 border-2 border-gray-300 rounded-2xl shadow-sm" data-quadrant="Q4">
+            <div class="quadrant-header bg-gray-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
+              <div><span class="text-lg font-bold">Q4</span><span class="ml-2 text-sm opacity-90">덜 긴급 + 덜 중요</span></div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs bg-gray-700 px-2 py-0.5 rounded-full">🗑️ Eliminate</span>
+                <span id="count-Q4" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+              </div>
+            </div>
+            <div id="list-Q4" class="task-list p-3 min-h-[120px] space-y-2"></div>
+            <div class="drop-hint hidden text-center text-gray-400 text-sm pb-3">여기에 놓으세요</div>
+          </div>
+
+        </section>
+
+        <!-- 대시보드 -->
+        <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-bold text-gray-700">📊 점검 대시보드</h2>
+            <div class="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+              <button id="tab-daily" class="tab-btn active px-3 py-1 text-sm rounded-md font-medium transition-all bg-white text-blue-600 shadow-sm">일간</button>
+              <button id="tab-weekly" class="tab-btn px-3 py-1 text-sm rounded-md font-medium transition-all text-gray-500 hover:text-gray-700">주간</button>
             </div>
           </div>
-          <div id="list-Q1" class="task-list p-3 min-h-[120px] space-y-2"></div>
-          <div class="drop-hint hidden text-center text-red-300 text-sm pb-3">여기에 놓으세요</div>
-        </div>
-
-        <!-- Q2: 중요 + 여유 -->
-        <div id="quadrant-Q2" class="quadrant-panel bg-blue-50 border-2 border-blue-300 rounded-2xl shadow-sm" data-quadrant="Q2">
-          <div class="quadrant-header bg-blue-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
-            <div><span class="text-lg font-bold">Q2</span><span class="ml-2 text-sm opacity-90">중요 + 여유</span></div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs bg-blue-700 px-2 py-0.5 rounded-full">📅 Schedule</span>
-              <span id="count-Q2" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="col-span-1">
+              <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">전체 완료율</p>
+              <div class="flex items-end gap-2 mb-2">
+                <span id="overall-pct" class="text-4xl font-bold text-gray-800">0</span>
+                <span class="text-xl text-gray-400 mb-1">%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div id="overall-bar" class="h-3 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500" style="width:0%"></div>
+              </div>
+              <p id="overall-detail" class="text-xs text-gray-400 mt-1">0개 완료 / 전체 0개</p>
+            </div>
+            <div class="col-span-1">
+              <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">사분면별 통계</p>
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</span>
+                  <div class="flex-1">
+                    <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q1 긴급+중요</span><span id="stat-Q1">0/0</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q1" class="h-1.5 bg-red-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</span>
+                  <div class="flex-1">
+                    <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q2 중요+여유</span><span id="stat-Q2">0/0</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q2" class="h-1.5 bg-blue-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</span>
+                  <div class="flex-1">
+                    <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q3 긴급+덜중요</span><span id="stat-Q3">0/0</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q3" class="h-1.5 bg-yellow-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</span>
+                  <div class="flex-1">
+                    <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q4 제거 대상</span><span id="stat-Q4">0/0</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q4" class="h-1.5 bg-gray-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-span-1 flex flex-col items-center">
+              <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide self-start">Q2 투자 비중</p>
+              <div class="relative w-36 h-36">
+                <canvas id="q2-chart"></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span id="q2-pct-label" class="text-xl font-bold text-gray-800">0%</span>
+                  <span class="text-xs text-gray-400">Q2 비중</span>
+                </div>
+              </div>
+              <p id="q2-desc" class="text-xs text-gray-400 mt-2 text-center">완료된 작업 기준</p>
             </div>
           </div>
-          <div id="list-Q2" class="task-list p-3 min-h-[120px] space-y-2"></div>
-          <div class="drop-hint hidden text-center text-blue-300 text-sm pb-3">여기에 놓으세요</div>
-        </div>
+        </section>
 
-        <!-- Q3: 긴급 + 덜중요 -->
-        <div id="quadrant-Q3" class="quadrant-panel bg-yellow-50 border-2 border-yellow-300 rounded-2xl shadow-sm" data-quadrant="Q3">
-          <div class="quadrant-header bg-yellow-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
-            <div><span class="text-lg font-bold">Q3</span><span class="ml-2 text-sm opacity-90">긴급 + 덜 중요</span></div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs bg-yellow-700 px-2 py-0.5 rounded-full">🤝 Delegate</span>
-              <span id="count-Q3" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
-            </div>
-          </div>
-          <div id="list-Q3" class="task-list p-3 min-h-[120px] space-y-2"></div>
-          <div class="drop-hint hidden text-center text-yellow-400 text-sm pb-3">여기에 놓으세요</div>
-        </div>
+      </div><!-- /view-matrix -->
 
-        <!-- Q4: 덜급 + 덜중요 -->
-        <div id="quadrant-Q4" class="quadrant-panel bg-gray-50 border-2 border-gray-300 rounded-2xl shadow-sm" data-quadrant="Q4">
-          <div class="quadrant-header bg-gray-500 text-white rounded-t-xl px-4 py-3 flex items-center justify-between">
-            <div><span class="text-lg font-bold">Q4</span><span class="ml-2 text-sm opacity-90">덜 긴급 + 덜 중요</span></div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs bg-gray-700 px-2 py-0.5 rounded-full">🗑️ Eliminate</span>
-              <span id="count-Q4" class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">0개</span>
-            </div>
-          </div>
-          <div id="list-Q4" class="task-list p-3 min-h-[120px] space-y-2"></div>
-          <div class="drop-hint hidden text-center text-gray-400 text-sm pb-3">여기에 놓으세요</div>
-        </div>
 
-      </section>
+      <!-- ══ [탭 2] 히스토리 뷰 ══ -->
+      <div id="view-history" class="hidden">
 
-      <!-- 대시보드 -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-bold text-gray-700">📊 점검 대시보드</h2>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
           <div class="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
-            <button id="tab-daily" class="tab-btn active px-3 py-1 text-sm rounded-md font-medium transition-all bg-white text-blue-600 shadow-sm">일간</button>
-            <button id="tab-weekly" class="tab-btn px-3 py-1 text-sm rounded-md font-medium transition-all text-gray-500 hover:text-gray-700">주간</button>
+            <button id="history-view-month" class="history-view-btn active px-4 py-1.5 text-sm rounded-md font-medium transition-all bg-white text-blue-600 shadow-sm">🗓️ 월 보기</button>
+            <button id="history-view-week" class="history-view-btn px-4 py-1.5 text-sm rounded-md font-medium transition-all text-gray-500 hover:text-gray-700">📋 주 보기</button>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="history-prev" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-lg">‹</button>
+            <span id="history-period-label" class="text-sm font-semibold text-gray-700 min-w-[140px] text-center"></span>
+            <button id="history-next" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-lg">›</button>
+            <button id="history-today" class="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors font-medium">오늘</button>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <!-- 전체 완료율 -->
-          <div class="col-span-1">
-            <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">전체 완료율</p>
-            <div class="flex items-end gap-2 mb-2">
-              <span id="overall-pct" class="text-4xl font-bold text-gray-800">0</span>
-              <span class="text-xl text-gray-400 mb-1">%</span>
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div id="overall-bar" class="h-3 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500" style="width:0%"></div>
-            </div>
-            <p id="overall-detail" class="text-xs text-gray-400 mt-1">0개 완료 / 전체 0개</p>
-          </div>
-          <!-- 사분면별 통계 -->
-          <div class="col-span-1">
-            <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">사분면별 통계</p>
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</span>
-                <div class="flex-1">
-                  <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q1 긴급+중요</span><span id="stat-Q1">0/0</span></div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q1" class="h-1.5 bg-red-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</span>
-                <div class="flex-1">
-                  <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q2 중요+여유</span><span id="stat-Q2">0/0</span></div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q2" class="h-1.5 bg-blue-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</span>
-                <div class="flex-1">
-                  <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q3 긴급+덜중요</span><span id="stat-Q3">0/0</span></div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q3" class="h-1.5 bg-yellow-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</span>
-                <div class="flex-1">
-                  <div class="flex justify-between text-xs text-gray-600 mb-0.5"><span>Q4 제거 대상</span><span id="stat-Q4">0/0</span></div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5"><div id="bar-Q4" class="h-1.5 bg-gray-400 rounded-full transition-all duration-500" style="width:0%"></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- Q2 도넛 차트 -->
-          <div class="col-span-1 flex flex-col items-center">
-            <p class="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide self-start">Q2 투자 비중</p>
-            <div class="relative w-36 h-36">
-              <canvas id="q2-chart"></canvas>
-              <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span id="q2-pct-label" class="text-xl font-bold text-gray-800">0%</span>
-                <span class="text-xs text-gray-400">Q2 비중</span>
-              </div>
-            </div>
-            <p id="q2-desc" class="text-xs text-gray-400 mt-2 text-center">완료된 작업 기준</p>
-          </div>
-        </div>
-      </section>
 
-    </div><!-- /view-matrix -->
+        <div id="history-calendar-area" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-4"></div>
 
-
-    <!-- ══════════════════════════════════════════════════════════
-         [탭 2] 히스토리 뷰
-    ══════════════════════════════════════════════════════════ -->
-    <div id="view-history" class="hidden">
-
-      <!-- 월/주 전환 + 네비게이션 -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
-        <!-- 월/주 보기 토글 -->
-        <div class="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
-          <button id="history-view-month" class="history-view-btn active px-4 py-1.5 text-sm rounded-md font-medium transition-all bg-white text-blue-600 shadow-sm">
-            🗓️ 월 보기
-          </button>
-          <button id="history-view-week" class="history-view-btn px-4 py-1.5 text-sm rounded-md font-medium transition-all text-gray-500 hover:text-gray-700">
-            📋 주 보기
-          </button>
+        <div id="history-day-detail" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+          <h3 id="history-day-title" class="text-sm font-bold text-gray-700 mb-3"></h3>
+          <div id="history-day-list" class="space-y-2"></div>
         </div>
 
-        <!-- 이전/다음 네비게이션 -->
-        <div class="flex items-center gap-3">
-          <button id="history-prev" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-lg">‹</button>
-          <span id="history-period-label" class="text-sm font-semibold text-gray-700 min-w-[140px] text-center">2026년 9월</span>
-          <button id="history-next" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-lg">›</button>
-          <button id="history-today" class="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors font-medium">오늘</button>
-        </div>
-      </div>
+      </div><!-- /view-history -->
 
-      <!-- 달력/주간 렌더링 영역 -->
-      <div id="history-calendar-area" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-4">
-        <!-- JS로 동적 렌더링 -->
-      </div>
+    </main>
 
-      <!-- 선택한 날짜의 완료 목록 -->
-      <div id="history-day-detail" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-        <h3 id="history-day-title" class="text-sm font-bold text-gray-700 mb-3">📌 날짜 완료 항목</h3>
-        <div id="history-day-list" class="space-y-2"></div>
-      </div>
-
-    </div><!-- /view-history -->
-
-  </main>
+  </div><!-- /app-body -->
 
 
-  <!-- ============================================================
-       카드 상세 편집 슬라이드 패널 (우측에서 슬라이드)
-  ============================================================ -->
-
-  <!-- 패널 열렸을 때 배경 오버레이 (클릭 시 패널 닫힘) -->
+  <!-- 상세 편집 슬라이드 패널 -->
   <div id="detail-overlay" class="fixed inset-0 bg-black/30 z-40 hidden"></div>
-
-  <!-- 슬라이드 패널 본체 -->
   <aside id="detail-panel" class="detail-panel fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col translate-x-full">
-
-    <!-- 패널 헤더 -->
     <div id="detail-panel-header" class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-      <!-- 사분면 배지 (색상은 JS로 동적 변경) -->
       <span id="detail-quadrant-badge" class="text-xs font-semibold px-3 py-1 rounded-full bg-gray-100 text-gray-600">Q1</span>
       <div class="flex items-center gap-2">
-        <!-- 삭제 버튼 -->
         <button id="detail-btn-delete" class="text-gray-400 hover:text-red-500 text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors">🗑️ 삭제</button>
-        <!-- 닫기 버튼 -->
         <button id="detail-btn-close" class="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors text-sm">✕</button>
       </div>
     </div>
-
-    <!-- 패널 내용 (스크롤 가능) -->
     <div class="flex-1 overflow-y-auto p-5 space-y-4">
-
-      <!-- 제목 편집 -->
       <div>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">제목</label>
-        <input
-          type="text"
-          id="detail-title"
-          class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-          placeholder="할 일 제목"
-        />
+        <input type="text" id="detail-title" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" placeholder="할 일 제목" />
       </div>
-
-      <!-- 사분면 변경 -->
       <div>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">사분면</label>
-        <select
-          id="detail-quadrant"
-          class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-        >
+        <select id="detail-quadrant" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
           <option value="Q1">Q1 🔴 긴급 + 중요</option>
           <option value="Q2">Q2 🔵 중요 + 여유</option>
           <option value="Q3">Q3 🟡 긴급 + 덜중요</option>
           <option value="Q4">Q4 ⚪ 제거 대상</option>
         </select>
       </div>
-
-      <!-- 마감일 편집 -->
       <div>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">마감일</label>
-        <input
-          type="date"
-          id="detail-due"
-          class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
+        <input type="date" id="detail-due" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
       </div>
-
-      <!-- 메모 / 설명 -->
       <div>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">메모 / 설명</label>
-        <textarea
-          id="detail-memo"
-          rows="6"
-          class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none leading-relaxed"
-          placeholder="링크, 참고 내용, 세부 사항 등을 자유롭게 입력하세요..."
-        ></textarea>
+        <textarea id="detail-memo" rows="6" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none leading-relaxed" placeholder="링크, 참고 내용, 세부 사항 등을 자유롭게 입력하세요..."></textarea>
       </div>
-
-      <!-- 생성 정보 -->
       <div class="pt-2 border-t border-gray-100">
         <p id="detail-meta" class="text-xs text-gray-400">생성: -</p>
         <p id="detail-completed-at" class="text-xs text-gray-400 mt-0.5"></p>
       </div>
-
     </div>
-
-    <!-- 패널 하단 저장 버튼 -->
     <div class="px-5 py-4 border-t border-gray-100 bg-gray-50">
-      <button
-        id="detail-btn-save"
-        class="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
-      >
-        💾 저장하기
-      </button>
+      <button id="detail-btn-save" class="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-sm">💾 저장하기</button>
     </div>
-
   </aside>
 
 
-  <!-- ============================================================
-       Import 확인 모달
-  ============================================================ -->
+  <!-- Import 모달 -->
   <div id="import-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
       <h3 class="text-lg font-bold text-gray-800 mb-2">📥 가져오기 방식 선택</h3>
@@ -415,24 +389,18 @@
   </div>
 
 
-  <!-- ============================================================
-       토스트 알림
-  ============================================================ -->
-  <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg opacity-0 translate-y-2 transition-all duration-300 pointer-events-none z-[60]">
-    알림
-  </div>
+  <!-- 토스트 알림 -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg opacity-0 translate-y-2 transition-all duration-300 pointer-events-none z-[60]">알림</div>
 
   <script src="app.js"></script>
 
-  <!-- ── Service Worker 등록 (PWA 오프라인·홈화면 지원) ── -->
+  <!-- Service Worker 등록 -->
   <script>
     if ('serviceWorker' in navigator) {
-      // 페이지 로드 완료 후 SW 등록 (성능 최적화)
       window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('./sw.js')
-          .then((reg) => console.log('[PWA] Service Worker 등록 완료:', reg.scope))
-          .catch((err) => console.warn('[PWA] Service Worker 등록 실패:', err));
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('[PWA] SW 등록:', reg.scope))
+          .catch(err => console.warn('[PWA] SW 실패:', err));
       });
     }
   </script>
