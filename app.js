@@ -133,18 +133,22 @@ function dbToTask(row) {
 }
 
 function taskToDb(task) {
-  return {
-    id:             task.id,
-    user_id:        currentUser.id,
-    title:          task.title,
-    quadrant:       task.quadrant,
-    due_date:       task.dueDate       || null,
-    scheduled_date: task.scheduledDate || null,
-    memo:           task.memo          || '',
-    completed:      task.completed,
-    completed_at:   task.completedAt   || null,
-    created_at:     task.createdAt,
+  const row = {
+    id:           task.id,
+    user_id:      currentUser.id,
+    title:        task.title,
+    quadrant:     task.quadrant,
+    due_date:     task.dueDate     || null,
+    memo:         task.memo        || '',
+    completed:    task.completed,
+    completed_at: task.completedAt || null,
+    created_at:   task.createdAt,
   };
+  // 캘린더 실행일이 배정되었을 때만 전송
+  if (task.scheduledDate) {
+    row.scheduled_date = task.scheduledDate;
+  }
+  return row;
 }
 
 
