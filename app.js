@@ -1220,66 +1220,6 @@ function initDetailPanel() {
 }
 
 
-/* ============================================================
-   14. Export / Import
-============================================================ */
-
-function exportTasks() {
-  if (tasks.length === 0) { showToast('⚠️ 내보낼 할 일이 없습니다.', 'warning'); return; }
-  const exportData = { exportedAt: new Date().toISOString(), version: '5.0', count: tasks.length, tasks };
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a'); a.href = url; a.download = `tasks_${getTodayStr()}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  showToast(`📤 ${tasks.length}개 할 일을 내보냈습니다.`);
-}
-
-let pendingImportData = null;
-
-function handleImportFile(file) {
-  if (!file || !file.name.endsWith('.json')) { showToast('⚠️ .json 파일만 가져올 수 있습니다.', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const parsed = JSON.parse(e.target.result);
-      if (!Array.isArray(parsed.tasks)) throw new Error('올바른 형식이 아닙니다.');
-      pendingImportData = parsed.tasks;
-      document.getElementById('import-modal').classList.add('active');
-    } catch (err) { showToast('⚠️ 파일 오류: ' + err.message, 'error'); }
-  };
-  reader.readAsText(file);
-}
-
-async function executeImport(mode) {
-  if (!pendingImportData) return;
-  let toUpsert = [];
-
-  if (mode === 'merge') {
-    const existingIds = new Set(tasks.map((t) => t.id));
-    toUpsert = pendingImportData.filter((t) => !existingIds.has(t.id));
-    tasks = [...tasks, ...toUpsert];
-    showToast(`🔀 ${toUpsert.length}개 항목이 병합되었습니다.`);
-  } else {
-    toUpsert = pendingImportData;
-    await supabaseClient.from('tasks').delete().eq('user_id', currentUser.id);
-    tasks = pendingImportData;
-    showToast(`🔄 ${tasks.length}개 항목으로 덮어쓰기 완료.`);
-  }
-
-  renderAll();
-
-  try {
-    await upsertTasksToDB(toUpsert);
-  } catch (e) {
-    await loadAndRender();
-    showToast('⚠️ 가져오기 중 오류 발생.', 'error');
-  }
-
-  document.getElementById('import-modal').classList.remove('active');
-  pendingImportData = null;
-  document.getElementById('import-file-input').value = '';
-}
-
 
 /* ============================================================
    15. 토스트 알림
@@ -1388,20 +1328,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add').addEventListener('click', addTask);
   document.getElementById('input-title').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTask(); });
 
-  // ── Export/Import ──
-  document.getElementById('btn-export').addEventListener('click', exportTasks);
-  document.getElementById('btn-import').addEventListener('click', () => document.getElementById('import-file-input').click());
-  document.getElementById('import-file-input').addEventListener('change', (e) => handleImportFile(e.target.files[0]));
-  document.getElementById('import-merge').addEventListener('click', () => executeImport('merge'));
-  document.getElementById('import-overwrite').addEventListener('click', () => executeImport('overwrite'));
-  document.getElementById('import-cancel').addEventListener('click', () => {
-    document.getElementById('import-modal').classList.remove('active');
-    pendingImportData = null;
-    document.getElementById('import-file-input').value = '';
-  });
-  document.getElementById('import-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) { document.getElementById('import-modal').classList.remove('active'); pendingImportData = null; }
-  });
+
 
   // ── 대시보드 일간/주간 탭 ──
   document.getElementById('tab-daily').addEventListener('click', () => {

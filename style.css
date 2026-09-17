@@ -317,7 +317,6 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
   transform: translateY(0) !important;
   pointer-events: auto !important;
 }
-#import-modal.active { display: flex !important; }
 
 .quadrant-panel[data-quadrant="Q1"] input[type="checkbox"].task-check { accent-color: #ef4444; }
 .quadrant-panel[data-quadrant="Q2"] input[type="checkbox"].task-check { accent-color: #3b82f6; }
