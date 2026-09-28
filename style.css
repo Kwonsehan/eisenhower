@@ -58,6 +58,12 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 .task-card.dragging { opacity: 0.4; cursor: grabbing; transform: scale(1.02) rotate(1deg); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
 .task-card.completed { opacity: 0.65; background: #f9fafb; }
 .task-card.completed .task-title { text-decoration: line-through; color: #9ca3af; }
+.task-card.task-completing {
+  opacity: 0 !important;
+  transform: scale(0.92) translateY(6px) !important;
+  transition: all 0.22s ease-in-out !important;
+  pointer-events: none;
+}
 
 @keyframes fadeInSlide {
   from { opacity: 0; transform: translateY(8px); }
@@ -119,9 +125,10 @@ body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI
 .archive-item-card {
   padding: 0.625rem 0.875rem; border-radius: 0.625rem; border-left: 3.5px solid;
   background: white; border-top: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6;
-  transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
 }
-.archive-item-card:hover { transform: translateX(3px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.archive-item-card:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.06); }
 .archive-item-card.q1 { border-left-color: #ef4444; }
 .archive-item-card.q2 { border-left-color: #3b82f6; }
 .archive-item-card.q3 { border-left-color: #eab308; }

@@ -40,7 +40,7 @@
     };
   </script>
 
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 
 <body class="bg-gray-100 min-h-screen font-sans">
@@ -381,14 +381,17 @@
 
         <!-- 지난 완료 기록 아카이브 (접이식) -->
         <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <button id="archive-toggle-btn" class="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition-colors">
-            <div class="flex items-center gap-2">
+          <div class="px-4 sm:px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50/60 transition-colors">
+            <button id="archive-toggle-btn" class="flex-1 flex items-center gap-2 text-left">
               <span class="text-base">📦</span>
               <span class="text-sm font-bold text-gray-700">지난 완료 기록 보관소</span>
               <span id="archive-count" class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">0개</span>
-            </div>
-            <span id="archive-chevron" class="text-xs text-gray-400 transition-transform duration-200">▼ 펼치기</span>
-          </button>
+              <span id="archive-chevron" class="text-xs text-gray-400 transition-transform duration-200 ml-1">▼ 펼치기</span>
+            </button>
+            <button id="btn-clear-archive" class="hidden text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg border border-red-200 font-semibold transition-all active:scale-95 whitespace-nowrap" title="완료된 기록을 모두 영구 삭제합니다">
+              🗑️ 전체 비우기
+            </button>
+          </div>
           <div id="archive-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50">
             <div id="archive-list" class="space-y-2">
               <p class="text-xs text-gray-400 text-center py-4">완료된 작업이 없습니다.</p>
@@ -569,16 +572,16 @@
   <!-- 토스트 알림 -->
   <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg opacity-0 translate-y-2 transition-all duration-300 pointer-events-none z-[60]">알림</div>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 
   <!-- Service Worker 등록 -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=13')
+        navigator.serviceWorker.register('./sw.js?v=14')
           .then(reg => {
             reg.update();
-            console.log('[PWA] SW v13 갱신:', reg.scope);
+            console.log('[PWA] SW v14 갱신:', reg.scope);
           })
           .catch(err => console.warn('[PWA] SW 실패:', err));
       });

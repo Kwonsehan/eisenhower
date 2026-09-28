@@ -369,9 +369,11 @@ function renderAll() {
   ['Q1', 'Q2', 'Q3', 'Q4'].forEach((q) => {
     const listEl = document.getElementById(`list-${q}`);
     listEl.innerHTML = '';
-    const qTasks = tasks.filter((t) => t.quadrant === q);
+    // [사분면 핵심 개선] 완료된 작업(!t.completed)만 사분면에 남깁니다.
+    // 완료된 작업은 하단의 [지난 완료 기록 보관소]로 자동 이동되어 사분면을 깨끗하게 유지합니다.
+    const qTasks = tasks.filter((t) => t.quadrant === q && !t.completed);
 
-    // Q2 마감 임박 알림 스마트 배너
+    // Q2 마감 임박 알림 스마트 배너 (아직 미완료된 Q2 작업 중 마감 임박 대상)
     if (q === 'Q2') {
       const imminentTasks = qTasks.filter(isQ2Imminent);
       if (imminentTasks.length > 0) {
@@ -400,6 +402,7 @@ function renderAll() {
         listEl.appendChild(card);
       });
     }
+    // 미완료된 활성 작업 개수만 정확히 사분면 헤더 뱃지에 표시
     document.getElementById(`count-${q}`).textContent = `${qTasks.length}개`;
   });
 
@@ -459,13 +462,21 @@ async function addTask() {
   }
 }
 
+/** 할 일 완료/미완료 토글 (완료 시 보관소로 자동 이동, 미완료 시 사분면으로 복구) */
 async function toggleComplete(taskId) {
   const task = tasks.find((t) => t.id === taskId);
   if (!task) return;
 
+  const wasCompleted = task.completed;
   task.completed   = !task.completed;
   task.completedAt = task.completed ? new Date().toISOString() : null;
   renderAll();
+
+  if (task.completed) {
+    showToast(`🎉 "${task.title}" 완료! 보관소로 이동했습니다.`);
+  } else {
+    showToast(`↩️ "${task.title}" 복구되어 사분면으로 돌아왔습니다.`);
+  }
 
   try {
     await updateTaskInDB(taskId, {
@@ -473,8 +484,8 @@ async function toggleComplete(taskId) {
       completedAt: task.completedAt,
     });
   } catch (e) {
-    task.completed   = !task.completed;
-    task.completedAt = task.completed ? new Date().toISOString() : null;
+    task.completed   = wasCompleted;
+    task.completedAt = wasCompleted ? task.completedAt : null;
     renderAll();
     showToast('⚠️ 저장 실패.', 'error');
   }
@@ -548,7 +559,14 @@ async function scheduleTaskDate(taskId, targetDateStr) {
 ============================================================ */
 
 function bindCardEvents(card, task) {
-  card.querySelector('.task-check').addEventListener('change', () => toggleComplete(task.id));
+  // 체크박스 클릭 시 카드에 페이드아웃 애니메이션을 주어 부드럽게 사분면에서 사라지게 함
+  const checkEl = card.querySelector('.task-check');
+  checkEl.addEventListener('change', () => {
+    card.classList.add('task-completing');
+    setTimeout(() => {
+      toggleComplete(task.id);
+    }, 200);
+  });
   card.querySelector('.btn-delete').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
   card.querySelector('.btn-move').addEventListener('click', (e) => { e.stopPropagation(); toggleMoveDropdown(card, task); });
   card.querySelector('[data-open-panel]').addEventListener('click', (e) => { e.stopPropagation(); openDetailPanel(task.id); });
@@ -784,37 +802,113 @@ function updateQ2Chart(filteredTasks) {
    11. 📦 지난 완료 기록 아카이브 (접이식)
 ============================================================ */
 
+/** 지난 완료 기록 보관소 렌더링 */
 function renderCompletedArchive() {
   const completedTasks = tasks
     .filter((t) => t.completed && t.completedAt)
     .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
 
+  // 완료 개수 뱃지 업데이트
   document.getElementById('archive-count').textContent = `${completedTasks.length}개`;
   const listEl = document.getElementById('archive-list');
 
+  // 완료 기록 전체 비우기 버튼 표시/숨김 제어
+  const clearBtn = document.getElementById('btn-clear-archive');
+  if (clearBtn) {
+    if (completedTasks.length > 0) {
+      clearBtn.classList.remove('hidden');
+    } else {
+      clearBtn.classList.add('hidden');
+    }
+  }
+
   if (completedTasks.length === 0) {
-    listEl.innerHTML = `<p class="text-xs text-gray-400 text-center py-4">완료된 작업이 없습니다.</p>`;
+    listEl.innerHTML = `<p class="text-xs text-gray-400 text-center py-5">완료된 작업이 없습니다.<br><span class="text-[11px] text-gray-300">사분면에서 할 일을 완료(V)하면 여기에 안전하게 보관됩니다.</span></p>`;
     return;
   }
 
   listEl.innerHTML = completedTasks.map((t) => `
-    <div class="archive-item-card ${t.quadrant.toLowerCase()}" data-id="${t.id}">
+    <div class="archive-item-card ${t.quadrant.toLowerCase()} p-2.5 sm:p-3" data-id="${t.id}">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-sm font-medium text-gray-800 break-words flex-1">${escapeHtml(t.title)}</span>
-        <span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold flex-shrink-0">
-          ${QUADRANT_INFO[t.quadrant].label.split(' ')[0]}
-        </span>
-      </div>
-      <div class="flex items-center justify-between text-xs text-gray-400 mt-1">
-        <span>✅ ${formatCompletedAt(t.completedAt)}</span>
-        ${t.memo ? `<span class="text-gray-500 font-medium truncate max-w-[150px]">📝 ${escapeHtml(t.memo)}</span>` : ''}
+        <!-- 왼쪽: 제목 및 완료 일시 (클릭 시 상세 모달) -->
+        <div class="flex-1 min-w-0 cursor-pointer" data-open-panel>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-sm font-medium text-gray-400 line-through break-words">${escapeHtml(t.title)}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold flex-shrink-0">
+              ${QUADRANT_INFO[t.quadrant].label.split(' ')[0]}
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-gray-400 mt-1 flex-wrap">
+            <span>✅ ${formatCompletedAt(t.completedAt)} 완료</span>
+            ${t.memo ? `<span class="text-gray-500 font-medium truncate max-w-[150px]">📝 ${escapeHtml(t.memo)}</span>` : ''}
+          </div>
+        </div>
+
+        <!-- 오른쪽: [↩️ 되돌리기] & [🗑️ 삭제] 제어 버튼 -->
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <button class="btn-restore-archive px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-all active:scale-95 flex items-center gap-1 shadow-xs" data-id="${t.id}" title="미완료로 복구하여 사분면으로 되돌립니다">
+            <span>↩️ 되돌리기</span>
+          </button>
+          <button class="btn-delete-archive p-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors active:scale-95" data-id="${t.id}" title="완전 영구 삭제">
+            🗑️
+          </button>
+        </div>
       </div>
     </div>
   `).join('');
 
-  listEl.querySelectorAll('.archive-item-card[data-id]').forEach((el) => {
-    el.addEventListener('click', () => openDetailPanel(el.dataset.id));
+  // 1) 상세 패널 열기 이벤트
+  listEl.querySelectorAll('[data-open-panel]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const card = el.closest('.archive-item-card');
+      if (card) openDetailPanel(card.dataset.id);
+    });
   });
+
+  // 2) 미완료로 되돌리기 (복구) 이벤트
+  listEl.querySelectorAll('.btn-restore-archive').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleComplete(btn.dataset.id);
+    });
+  });
+
+  // 3) 개별 영구 삭제 이벤트
+  listEl.querySelectorAll('.btn-delete-archive').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteTask(btn.dataset.id);
+    });
+  });
+}
+
+/** 완료된 기록 전체 일괄 영구 삭제 */
+async function clearCompletedArchive() {
+  const completedTasks = tasks.filter((t) => t.completed);
+  if (completedTasks.length === 0) return;
+
+  const count = completedTasks.length;
+  if (!confirm(`완료된 기록 ${count}건을 모두 영구 삭제하시겠습니까?\n삭제된 기록은 복구할 수 없습니다.`)) {
+    return;
+  }
+
+  const idsToDelete = completedTasks.map((t) => t.id);
+  tasks = tasks.filter((t) => !t.completed);
+  renderAll();
+
+  try {
+    const { error } = await supabaseClient
+      .from('tasks')
+      .delete()
+      .in('id', idsToDelete);
+    if (error) throw error;
+    showToast(`🗑️ 완료된 기록 ${count}건이 영구 삭제되었습니다.`);
+  } catch (e) {
+    console.error('완료 기록 일괄 삭제 실패:', e);
+    await loadAndRender();
+    showToast('⚠️ 삭제 중 오류가 발생했습니다.', 'error');
+  }
 }
 
 function initArchiveToggle() {
@@ -827,6 +921,15 @@ function initArchiveToggle() {
     contentEl.classList.toggle('hidden', !isArchiveOpen);
     chevronEl.textContent = isArchiveOpen ? '▲ 접기' : '▼ 펼치기';
   });
+
+  // 전체 비우기 버튼 리스너 바인딩
+  const clearBtn = document.getElementById('btn-clear-archive');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearCompletedArchive();
+    });
+  }
 }
 
 
